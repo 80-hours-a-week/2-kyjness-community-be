@@ -1,5 +1,5 @@
 # app/auth/auth_controller.py
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from typing import Optional
 import re
 from app.auth.auth_model import AuthModel
@@ -69,6 +69,12 @@ class AuthController:
         return bool(AuthController._get_url_pattern().match(url))
     
     @staticmethod
+    def _get_client_identifier(request: Request) -> str:
+        """클라이언트 식별자 생성 (Rate limiting용)"""
+        client_host = request.client.host if request.client else "unknown"
+        return client_host
+    
+    @staticmethod
     def check_rate_limit(identifier: str):
         """Rate limiting 확인"""
         # status code 429번
@@ -77,12 +83,17 @@ class AuthController:
             raise HTTPException(status_code=429, detail={"code": "RATE_LIMIT_EXCEEDED", "data": None})
     
     @staticmethod
-    def signup(email: str, password: str, password_confirm: str, nickname: str, profile_image_url: Optional[str] = None, identifier: Optional[str] = None):
+    def signup(request: Request, email: Optional[str] = None, password: Optional[str] = None, password_confirm: Optional[str] = None, nickname: Optional[str] = None, profile_image_url: Optional[str] = None):
         """회원가입 처리"""
+        # status code 400번
+        # 빈 body 체크 (비즈니스 로직)
+        if email is None or password is None or password_confirm is None or nickname is None:
+            raise HTTPException(status_code=400, detail={"code": "INVALID_REQUEST_BODY", "data": None})
+        
         # status code 429번
         # Rate limiting 확인 (요청 과다 체크)
-        if identifier:
-            AuthController.check_rate_limit(identifier)
+        identifier = AuthController._get_client_identifier(request)
+        AuthController.check_rate_limit(identifier)
         
         # status code 400번
         # 필수 필드 검증
@@ -133,12 +144,17 @@ class AuthController:
         return {"code": "SIGNUP_SUCCESS", "data": None}
     
     @staticmethod
-    def login(email: str, password: str, identifier: Optional[str] = None):
+    def login(request: Request, email: Optional[str] = None, password: Optional[str] = None):
         """로그인 처리"""
+        # status code 400번
+        # 빈 body 체크 (비즈니스 로직)
+        if email is None or password is None:
+            raise HTTPException(status_code=400, detail={"code": "INVALID_REQUEST_BODY", "data": None})
+        
         # status code 429번
         # Rate limiting 확인 (요청 과다 체크)
-        if identifier:
-            AuthController.check_rate_limit(identifier)
+        identifier = AuthController._get_client_identifier(request)
+        AuthController.check_rate_limit(identifier)
         
         # status code 400번
         # 필수 필드 검증

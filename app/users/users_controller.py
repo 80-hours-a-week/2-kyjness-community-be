@@ -25,7 +25,7 @@ class UsersController:
     
     # 프로필 이미지 업로드 관련 상수
     ALLOWED_PROFILE_IMAGE_TYPES = ["image/jpeg", "image/jpg"]  # .jpg만 허용
-    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+    MAX_FILE_SIZE = settings.MAX_FILE_SIZE  # config에서 가져옴
     
     @staticmethod
     def validate_password_format(password: str) -> bool:
@@ -72,26 +72,16 @@ class UsersController:
         return file_content[:2] == b'\xff\xd8'
     
     @staticmethod
-    async def upload_profile_image(user_id: int, session_id: Optional[str], profile_image: UploadFile):
+    async def upload_profile_image(user_id: int, authenticated_user_id: int, profile_image: UploadFile):
         """프로필 이미지 업로드 처리"""
-        # status code 401번
-        # 인증 정보 없음
-        if not session_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
-        # 세션 ID 검증
-        authenticated_user_id = AuthModel.verify_token(session_id)
-        if not authenticated_user_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
         # status code 403번
         # 다른 사용자 프로필 이미지 업로드 시도
         if authenticated_user_id != user_id:
             raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "data": None})
         
         # status code 400번
-        # user_id 형식 검증
-        if not isinstance(user_id, int) or user_id <= 0:
+        # user_id 비즈니스 검증 (FastAPI가 이미 int로 변환했으므로 타입 체크 불필요)
+        if user_id <= 0:
             raise HTTPException(status_code=400, detail={"code": "INVALID_USERID_FORMAT", "data": None})
         
         # status code 400번
@@ -188,26 +178,16 @@ class UsersController:
         }
     
     @staticmethod
-    def get_user(user_id: int, session_id: Optional[str]):
+    def get_user(user_id: int, authenticated_user_id: int):
         """내 정보 조회 처리"""
-        # status code 401번
-        # 인증 정보 없음
-        if not session_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
-        # 세션 ID 검증
-        authenticated_user_id = AuthModel.verify_token(session_id)
-        if not authenticated_user_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
         # status code 403번
         # 다른 사용자 정보 조회 시도
         if authenticated_user_id != user_id:
             raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "data": None})
         
         # status code 400번
-        # user_id 형식 검증
-        if not isinstance(user_id, int) or user_id <= 0:
+        # user_id 비즈니스 검증 (FastAPI가 이미 int로 변환했으므로 타입 체크 불필요)
+        if user_id <= 0:
             raise HTTPException(status_code=400, detail={"code": "INVALID_USERID_FORMAT", "data": None})
         
         # 사용자 정보 조회
@@ -222,26 +202,16 @@ class UsersController:
         }
     
     @staticmethod
-    def update_user(user_id: int, session_id: Optional[str], nickname: Optional[str] = None, profile_image_url: Optional[str] = None):
+    def update_user(user_id: int, authenticated_user_id: int, nickname: Optional[str] = None, profile_image_url: Optional[str] = None):
         """내 정보 수정 처리"""
-        # status code 401번
-        # 인증 정보 없음
-        if not session_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
-        # 세션 ID 검증
-        authenticated_user_id = AuthModel.verify_token(session_id)
-        if not authenticated_user_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
         # status code 403번
         # 다른 사용자 정보 수정 시도
         if authenticated_user_id != user_id:
             raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "data": None})
         
         # status code 400번
-        # user_id 형식 검증
-        if not isinstance(user_id, int) or user_id <= 0:
+        # user_id 비즈니스 검증 (FastAPI가 이미 int로 변환했으므로 타입 체크 불필요)
+        if user_id <= 0:
             raise HTTPException(status_code=400, detail={"code": "INVALID_USERID_FORMAT", "data": None})
         
         # 닉네임과 프로필 이미지 URL 둘 다 없으면 에러
@@ -250,18 +220,11 @@ class UsersController:
         
         # 닉네임 검증 및 수정
         if nickname is not None:
-            if not isinstance(nickname, str) or not nickname.strip():
-                raise HTTPException(status_code=400, detail={"code": "MISSING_REQUIRED_FIELD", "data": None})
-            
-            # 닉네임 형식 검증 (11자 이상 체크 포함)
-            if len(nickname) > 10:
-                raise HTTPException(status_code=400, detail={"code": "INVALID_NICKNAME_FORMAT", "data": None})
-            
-            # 공백 체크
+            # 공백 체크 (비즈니스 로직)
             if ' ' in nickname:
                 raise HTTPException(status_code=400, detail={"code": "INVALID_NICKNAME_FORMAT", "data": None})
             
-            # 닉네임 형식 검증
+            # 닉네임 형식 검증 (비즈니스 로직: 한글/영문/숫자만)
             if not UsersController.validate_nickname_format(nickname):
                 raise HTTPException(status_code=400, detail={"code": "INVALID_NICKNAME_FORMAT", "data": None})
             
@@ -291,37 +254,19 @@ class UsersController:
         return {"code": "USER_UPDATED", "data": None}
     
     @staticmethod
-    def update_password(user_id: int, session_id: Optional[str], current_password: str, new_password: str):
+    def update_password(user_id: int, authenticated_user_id: int, current_password: str, new_password: str):
         """비밀번호 변경 처리"""
-        # status code 401번
-        # 인증 정보 없음
-        if not session_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
-        # 세션 ID 검증
-        authenticated_user_id = AuthModel.verify_token(session_id)
-        if not authenticated_user_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
         # status code 403번
         # 다른 사용자 비밀번호 변경 시도
         if authenticated_user_id != user_id:
             raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "data": None})
         
         # status code 400번
-        # user_id 형식 검증
-        if not isinstance(user_id, int) or user_id <= 0:
+        # user_id 비즈니스 검증 (FastAPI가 이미 int로 변환했으므로 타입 체크 불필요)
+        if user_id <= 0:
             raise HTTPException(status_code=400, detail={"code": "INVALID_USERID_FORMAT", "data": None})
         
-        # 현재 비밀번호 입력 안했을 시
-        if not current_password or not isinstance(current_password, str) or not current_password.strip():
-            raise HTTPException(status_code=400, detail={"code": "MISSING_REQUIRED_FIELD", "data": None})
-        
-        # 새 비밀번호 입력 안했을 시
-        if not new_password or not isinstance(new_password, str) or not new_password.strip():
-            raise HTTPException(status_code=400, detail={"code": "MISSING_REQUIRED_FIELD", "data": None})
-        
-        # 현재 비밀번호 형식 검증
+        # 현재 비밀번호 형식 검증 (비즈니스 로직: 대문자/소문자/숫자/특수문자 각각 최소 1개)
         if not UsersController.validate_password_format(current_password):
             raise HTTPException(status_code=400, detail={"code": "INVALID_CURRENTPASSWORD_FORMAT", "data": None})
         
@@ -346,26 +291,16 @@ class UsersController:
         return {"code": "PASSWORD_UPDATED", "data": None}
     
     @staticmethod
-    def withdraw_user(user_id: int, session_id: Optional[str]):
+    def withdraw_user(user_id: int, authenticated_user_id: int):
         """회원 탈퇴 처리"""
-        # status code 401번
-        # 인증 정보 없음
-        if not session_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
-        # 세션 ID 검증
-        authenticated_user_id = AuthModel.verify_token(session_id)
-        if not authenticated_user_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
         # status code 403번
         # 다른 사용자 탈퇴 시도
         if authenticated_user_id != user_id:
             raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "data": None})
         
         # status code 400번
-        # user_id 형식 검증
-        if not isinstance(user_id, int) or user_id <= 0:
+        # user_id 비즈니스 검증 (FastAPI가 이미 int로 변환했으므로 타입 체크 불필요)
+        if user_id <= 0:
             raise HTTPException(status_code=400, detail={"code": "INVALID_USERID_FORMAT", "data": None})
         
         # 사용자 존재 확인

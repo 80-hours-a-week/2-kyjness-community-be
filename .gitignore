@@ -1,5 +1,83 @@
+# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+# 가상환경 디렉토리 (로컬 개발 환경)
 .venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+# 환경 변수 파일 (민감한 정보 포함)
 .env
+.env.local
+.env.*.local
+
+# IDE / Editors
+# PyCharm / IntelliJ IDEA
 .idea/
+*.iml
+*.iws
+*.ipr
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Testing / Coverage
+# 테스트 결과 및 커버리지 리포트
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Distribution / Packaging
+# 빌드 및 배포 관련 파일
+dist/
+build/
+*.egg-info/
+*.egg
+wheels/
+
+# Logs
+# 로그 파일
+*.log
+logs/
+
+# Database
+# 데이터베이스 파일 (SQLite 등)
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+# 임시 파일
+tmp/
+temp/
+*.tmp

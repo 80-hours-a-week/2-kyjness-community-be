@@ -58,10 +58,13 @@ cp .env.example .env
 
 ```bash
 # 개발 모드 (자동 리로드)
-python main.py
-
-# 또는 uvicorn 직접 실행
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# 프로덕션 모드
+uvicorn main:app --host 0.0.0.0 --port 8000
+
+# 환경 변수 사용 (config.py의 설정값 사용)
+uvicorn main:app --host ${HOST} --port ${PORT}
 ```
 
 ### 5. API 문서 확인

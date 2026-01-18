@@ -15,7 +15,7 @@ class Settings:
     DEBUG: bool = os.getenv("DEBUG", "True").lower() == "true"
     
     # CORS 설정
-    CORS_ORIGINS: List[str] = os.getenv("CORS_ORIGINS", "*").split(",")
+    CORS_ORIGINS: List[str] = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "*").split(",")]
     
     # 세션 설정
     SESSION_EXPIRY_TIME: int = int(os.getenv("SESSION_EXPIRY_TIME", "86400"))  # 24시간
@@ -26,7 +26,7 @@ class Settings:
     
     # 파일 업로드 설정
     MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB (바이트)
-    ALLOWED_IMAGE_TYPES: List[str] = os.getenv("ALLOWED_IMAGE_TYPES", "image/jpeg,image/jpg,image/png").split(",")
+    ALLOWED_IMAGE_TYPES: List[str] = [img_type.strip() for img_type in os.getenv("ALLOWED_IMAGE_TYPES", "image/jpeg,image/jpg,image/png").split(",")]
     
     # API 기본 URL
     BE_API_URL: str = os.getenv("BE_API_URL", "{BE-API-URL}")

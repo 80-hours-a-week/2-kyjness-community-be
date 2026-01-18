@@ -18,22 +18,9 @@ class PostsController:
     @staticmethod
     def create_post(user_id: int, title: str, content: str, file_url: str = ""):
         """게시글 작성 처리"""
-        # status code 400번
-        # 필수 필드 검증
-        if not title or not isinstance(title, str) or not title.strip():
-            raise HTTPException(status_code=400, detail={"code": "MISSING_REQUIRED_FIELD", "data": None})
-        if not content or not isinstance(content, str) or not content.strip():
-            raise HTTPException(status_code=400, detail={"code": "MISSING_REQUIRED_FIELD", "data": None})
-        
-        # status code 400번
-        # 제목 길이 검증 (최대 26자)
-        if len(title) > PostsController.MAX_TITLE_LENGTH:
-            raise HTTPException(status_code=400, detail={"code": "INVALID_TITLE_FORMAT", "data": None})
-        
-        # status code 400번
-        # 파일 URL 형식 검증
+        # 파일 URL 형식 검증 (비즈니스 로직)
         if file_url and not (file_url.startswith("http://") or file_url.startswith("https://") or file_url.startswith(settings.BE_API_URL)):
-            raise HTTPException(status_code=400, detail={"code": "INVALID_FILEURL", "data": None})
+            raise HTTPException(status_code=400, detail={"code": "INVALID_FILE_URL", "data": None})
 
         # 게시글 생성
         post = PostsModel.create_post(user_id, title, content, file_url)
@@ -42,21 +29,16 @@ class PostsController:
         return {"code": "POST_UPLOADED", "data": {"postId": post["postId"]}}
 
     @staticmethod
-    async def upload_post_image(post_id: int, session_id: Optional[str], file: UploadFile):
+    async def upload_post_image(post_id: int, user_id: int, file: UploadFile):
         """게시글 이미지 업로드 처리"""
-        # status code 401번
-        # 인증 정보 없음
-        if not session_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
-        # 세션 ID 검증
-        authenticated_user_id = AuthModel.verify_token(session_id)
-        if not authenticated_user_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
+        # status code 400번
+        # 파일 없음
+        if not file:
+            raise HTTPException(status_code=400, detail={"code": "MISSING_REQUIRED_FIELD", "data": None})
         
         # status code 400번
-        # post_id 형식 검증
-        if not isinstance(post_id, int) or post_id <= 0:
+        # post_id 비즈니스 검증 (FastAPI가 이미 int로 변환했으므로 타입 체크 불필요)
+        if post_id <= 0:
             raise HTTPException(status_code=400, detail={"code": "INVALID_POSTID_FORMAT", "data": None})
         
         # 게시글 존재 확인
@@ -66,7 +48,7 @@ class PostsController:
         
         # status code 403번
         # 작성자가 아닌 경우
-        if post["authorId"] != authenticated_user_id:
+        if post["authorId"] != user_id:
             raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "data": None})
 
         # status code 400번
@@ -120,13 +102,7 @@ class PostsController:
     @staticmethod
     def get_posts(page: int = 1, size: int = 10):
         """게시글 목록 조회 처리"""
-        # status code 400번
-        # 페이지 검증
-        if not isinstance(page, int) or page < 1:
-            raise HTTPException(status_code=400, detail={"code": "INVALID_PAGE_VALUE", "data": None})
-        if not isinstance(size, int) or size < 1:
-            raise HTTPException(status_code=400, detail={"code": "INVALID_SIZE_VALUE", "data": None})
-
+        # Query parameter는 Route에서 이미 ge=1로 검증됨
         posts = PostsModel.get_all_posts(page, size)
 
         # 작성자 정보 추가
@@ -157,8 +133,8 @@ class PostsController:
     def get_post(post_id: int):
         """게시글 상세 조회 처리"""
         # status code 400번
-        # post_id 형식 검증
-        if not isinstance(post_id, int) or post_id <= 0:
+        # post_id 비즈니스 검증 (FastAPI가 이미 int로 변환했으므로 타입 체크 불필요)
+        if post_id <= 0:
             raise HTTPException(status_code=400, detail={"code": "INVALID_POSTID_FORMAT", "data": None})
         
         post = PostsModel.find_post_by_id(post_id)
@@ -194,27 +170,12 @@ class PostsController:
         return {"code": "POST_RETRIEVED", "data": result}
 
     @staticmethod
-    def update_post(user_id: int, post_id: int, session_id: Optional[str], title: Optional[str] = None,
+    def update_post(post_id: int, user_id: int, title: Optional[str] = None,
                     content: Optional[str] = None, file_url: Optional[str] = None):
         """게시글 수정 처리"""
-        # status code 401번
-        # 인증 정보 없음
-        if not session_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
-        # 세션 ID 검증
-        authenticated_user_id = AuthModel.verify_token(session_id)
-        if not authenticated_user_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
-        # status code 403번
-        # 다른 사용자 게시글 수정 시도
-        if authenticated_user_id != user_id:
-            raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "data": None})
-        
         # status code 400번
-        # post_id 형식 검증
-        if not isinstance(post_id, int) or post_id <= 0:
+        # post_id 비즈니스 검증 (FastAPI가 이미 int로 변환했으므로 타입 체크 불필요)
+        if post_id <= 0:
             raise HTTPException(status_code=400, detail={"code": "INVALID_POSTID_FORMAT", "data": None})
         
         post = PostsModel.find_post_by_id(post_id)
@@ -227,21 +188,9 @@ class PostsController:
         if post["authorId"] != user_id:
             raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "data": None})
 
-        # status code 400번
-        # 형식 검증
-        if title is not None:
-            if not isinstance(title, str) or not title.strip():
-                raise HTTPException(status_code=400, detail={"code": "INVALID_TITLE_FORMAT", "data": None})
-            # 제목 길이 검증 (최대 26자)
-            if len(title) > PostsController.MAX_TITLE_LENGTH:
-                raise HTTPException(status_code=400, detail={"code": "INVALID_TITLE_FORMAT", "data": None})
-        
-        if content is not None:
-            if not isinstance(content, str) or not content.strip():
-                raise HTTPException(status_code=400, detail={"code": "INVALID_CONTENT_FORMAT", "data": None})
-        
+        # 파일 URL 형식 검증 (비즈니스 로직)
         if file_url is not None and file_url and not (file_url.startswith("http://") or file_url.startswith("https://") or file_url.startswith(settings.BE_API_URL)):
-            raise HTTPException(status_code=400, detail={"code": "INVALID_FILEURL", "data": None})
+            raise HTTPException(status_code=400, detail={"code": "INVALID_FILE_URL", "data": None})
 
         # 게시글 수정
         PostsModel.update_post(post_id, title, content, file_url)
@@ -250,26 +199,11 @@ class PostsController:
         return {"code": "POST_UPDATED", "data": None}
 
     @staticmethod
-    def delete_post(user_id: int, post_id: int, session_id: Optional[str]):
+    def delete_post(post_id: int, user_id: int):
         """게시글 삭제 처리"""
-        # status code 401번
-        # 인증 정보 없음
-        if not session_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
-        # 세션 ID 검증
-        authenticated_user_id = AuthModel.verify_token(session_id)
-        if not authenticated_user_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
-        # status code 403번
-        # 다른 사용자 게시글 삭제 시도
-        if authenticated_user_id != user_id:
-            raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "data": None})
-        
         # status code 400번
-        # post_id 형식 검증
-        if not isinstance(post_id, int) or post_id <= 0:
+        # post_id 비즈니스 검증 (FastAPI가 이미 int로 변환했으므로 타입 체크 불필요)
+        if post_id <= 0:
             raise HTTPException(status_code=400, detail={"code": "INVALID_POSTID_FORMAT", "data": None})
         
         post = PostsModel.find_post_by_id(post_id)

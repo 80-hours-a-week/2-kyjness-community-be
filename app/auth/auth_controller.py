@@ -83,57 +83,37 @@ class AuthController:
             raise HTTPException(status_code=429, detail={"code": "RATE_LIMIT_EXCEEDED", "data": None})
     
     @staticmethod
-    def signup(request: Request, email: Optional[str] = None, password: Optional[str] = None, password_confirm: Optional[str] = None, nickname: Optional[str] = None, profile_image_url: Optional[str] = None):
+    def signup(request: Request, email: str, password: str, password_confirm: str, nickname: str, profile_image_url: Optional[str] = None):
         """회원가입 처리"""
-        # status code 400번
-        # 빈 body 체크 (비즈니스 로직)
-        if email is None or password is None or password_confirm is None or nickname is None:
-            raise HTTPException(status_code=400, detail={"code": "INVALID_REQUEST_BODY", "data": None})
-        
         # status code 429번
         # Rate limiting 확인 (요청 과다 체크)
         identifier = AuthController._get_client_identifier(request)
         AuthController.check_rate_limit(identifier)
         
-        # status code 400번
-        # 필수 필드 검증
-        if not email or not isinstance(email, str) or not email.strip():
-            raise HTTPException(status_code=400, detail={"code": "MISSING_REQUIRED_FIELD", "data": None})
-        if not password or not isinstance(password, str) or not password.strip():
-            raise HTTPException(status_code=400, detail={"code": "MISSING_REQUIRED_FIELD", "data": None})
-        if not password_confirm or not isinstance(password_confirm, str) or not password_confirm.strip():
-            raise HTTPException(status_code=400, detail={"code": "MISSING_REQUIRED_FIELD", "data": None})
-        if not nickname or not isinstance(nickname, str) or not nickname.strip():
-            raise HTTPException(status_code=400, detail={"code": "MISSING_REQUIRED_FIELD", "data": None})
-        
-        # 이메일 형식 검증
-        if not AuthController.validate_email_format(email):
-            raise HTTPException(status_code=400, detail={"code": "INVALID_EMAIL_FORMAT", "data": None})
-        
-        # 비밀번호 형식 검증
+        # 비밀번호 형식 검증 (비즈니스 로직: 대문자/소문자/숫자/특수문자 각각 최소 1개)
         if not AuthController.validate_password_format(password):
             raise HTTPException(status_code=400, detail={"code": "INVALID_PASSWORD_FORMAT", "data": None})
         
-        # 비밀번호 확인 일치 검증
+        # 비밀번호 확인 일치 검증 (비즈니스 로직)
         if password != password_confirm:
             raise HTTPException(status_code=400, detail={"code": "PASSWORD_MISMATCH", "data": None})
         
-        # 닉네임 형식 검증 (공백 체크 포함)
+        # 닉네임 형식 검증 (비즈니스 로직: 공백 체크, 한글/영문/숫자만)
         if ' ' in nickname:
             raise HTTPException(status_code=400, detail={"code": "INVALID_NICKNAME_FORMAT", "data": None})
         if not AuthController.validate_nickname_format(nickname):
             raise HTTPException(status_code=400, detail={"code": "INVALID_NICKNAME_FORMAT", "data": None})
         
-        # 프로필 이미지 URL 형식 검증
+        # 프로필 이미지 URL 형식 검증 (비즈니스 로직)
         if not AuthController.validate_profile_image_url(profile_image_url):
             raise HTTPException(status_code=400, detail={"code": "INVALID_PROFILEIMAGEURL", "data": None})
         
         #status code 409번
-        # 이메일 중복 확인
+        # 이메일 중복 확인 (비즈니스 로직)
         if AuthModel.email_exists(email):
             raise HTTPException(status_code=409, detail={"code": "EMAIL_ALREADY_EXISTS", "data": None})
         
-        # 닉네임 중복 확인
+        # 닉네임 중복 확인 (비즈니스 로직)
         if AuthModel.nickname_exists(nickname):
             raise HTTPException(status_code=409, detail={"code": "NICKNAME_ALREADY_EXISTS", "data": None})
         
@@ -144,30 +124,14 @@ class AuthController:
         return {"code": "SIGNUP_SUCCESS", "data": None}
     
     @staticmethod
-    def login(request: Request, email: Optional[str] = None, password: Optional[str] = None):
+    def login(request: Request, email: str, password: str):
         """로그인 처리"""
-        # status code 400번
-        # 빈 body 체크 (비즈니스 로직)
-        if email is None or password is None:
-            raise HTTPException(status_code=400, detail={"code": "INVALID_REQUEST_BODY", "data": None})
-        
         # status code 429번
         # Rate limiting 확인 (요청 과다 체크)
         identifier = AuthController._get_client_identifier(request)
         AuthController.check_rate_limit(identifier)
         
-        # status code 400번
-        # 필수 필드 검증
-        if not email or not isinstance(email, str) or not email.strip():
-            raise HTTPException(status_code=400, detail={"code": "MISSING_REQUIRED_FIELD", "data": None})
-        if not password or not isinstance(password, str) or not password.strip():
-            raise HTTPException(status_code=400, detail={"code": "MISSING_REQUIRED_FIELD", "data": None})
-        
-        # 이메일 형식 검증
-        if not AuthController.validate_email_format(email):
-            raise HTTPException(status_code=400, detail={"code": "INVALID_EMAIL_FORMAT", "data": None})
-        
-        # 비밀번호 형식 검증
+        # 비밀번호 형식 검증 (비즈니스 로직: 대문자/소문자/숫자/특수문자 각각 최소 1개)
         if not AuthController.validate_password_format(password):
             raise HTTPException(status_code=400, detail={"code": "INVALID_PASSWORD_FORMAT", "data": None})
         
@@ -198,35 +162,15 @@ class AuthController:
     @staticmethod
     def logout(session_id: Optional[str]):
         """로그아웃 처리 (쿠키-세션 방식)"""
-        # status code 401번
-        # 인증 정보 없음
-        if not session_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
-        # 세션 ID 검증 실패
-        user_id = AuthModel.verify_token(session_id)
-        if not user_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
-        # 세션 ID 삭제
+        # 세션 ID 삭제 (인증은 Dependency에서 이미 검증됨)
         AuthModel.revoke_token(session_id)
         
         # status code 200번(로그아웃 성공)
         return {"code": "LOGOUT_SUCCESS", "data": None}
     
     @staticmethod
-    def get_me(session_id: Optional[str]):
+    def get_me(user_id: int):
         """현재 로그인한 사용자 정보 조회 (쿠키-세션 방식)"""
-        # status code 401번
-        # 인증 정보 없음
-        if not session_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
-        # 세션 ID 검증 실패
-        user_id = AuthModel.verify_token(session_id)
-        if not user_id:
-            raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "data": None})
-        
         # 사용자 정보 조회 실패
         user = AuthModel.find_user_by_id(user_id)
         if not user:

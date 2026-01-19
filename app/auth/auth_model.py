@@ -2,10 +2,10 @@
 from typing import Optional, Dict
 import secrets  # 암호학적으로 안전한 랜덤 세션 ID 생성용
 import time
-import hashlib
+import bcrypt
 import threading
 from datetime import datetime
-from config import settings
+from app.core.config import settings
 
 class AuthModel:
     """인증 관련 데이터 모델 (JSON 기반, DB 사용하지 않음)"""
@@ -33,13 +33,21 @@ class AuthModel:
     
     @staticmethod
     def _hash_password(password: str) -> str:
-        """비밀번호 해시화 (SHA-256 사용)"""
-        return hashlib.sha256(password.encode('utf-8')).hexdigest()
+        """비밀번호 해시화 (bcrypt 사용)"""
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+        return hashed.decode('utf-8')
     
     @staticmethod
     def _verify_password(password: str, hashed_password: str) -> bool:
-        """비밀번호 검증"""
-        return AuthModel._hash_password(password) == hashed_password
+        """비밀번호 검증 (bcrypt 사용)"""
+        try:
+            return bcrypt.checkpw(
+                password.encode('utf-8'),
+                hashed_password.encode('utf-8')
+            )
+        except (ValueError, TypeError):
+            return False
     
     #데이터 CRUD 메서드
     @classmethod
@@ -139,7 +147,7 @@ class AuthModel:
         if not user:
             return False
         
-        # 비밀번호 해시화하여 저장
+        # 새 비밀번호 해시화하여 저장
         user["password"] = cls._hash_password(new_password)
         return True
     

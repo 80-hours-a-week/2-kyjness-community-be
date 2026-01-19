@@ -1,18 +1,17 @@
 # app/auth/auth_route.py
-from fastapi import APIRouter, Request, Response, Cookie, Depends
+from fastapi import APIRouter, Response, Cookie, Depends
 from typing import Optional
 from app.auth.auth_scheme import SignUpRequest, LoginRequest
-from app.auth.auth_controller import AuthController
-from app.auth.dependencies import get_current_user
+from app.auth import auth_controller
+from app.core.dependencies import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # 회원가입
 @router.post("/signup", status_code=201)
-async def signup(signup_data: SignUpRequest, request: Request):
+async def signup(signup_data: SignUpRequest):
     """회원가입 API"""
-    return AuthController.signup(
-        request=request,
+    return auth_controller.signup(
         email=signup_data.email,
         password=signup_data.password,
         password_confirm=signup_data.passwordConfirm,
@@ -22,10 +21,9 @@ async def signup(signup_data: SignUpRequest, request: Request):
 
 # 로그인 (쿠키-세션 방식)
 @router.post("/login", status_code=200)
-async def login(login_data: LoginRequest, request: Request, response: Response):
+async def login(login_data: LoginRequest, response: Response):
     """로그인 API (쿠키-세션 방식)"""
-    result = AuthController.login(
-        request=request,
+    result = auth_controller.login(
         email=login_data.email,
         password=login_data.password
     )
@@ -47,7 +45,7 @@ async def login(login_data: LoginRequest, request: Request, response: Response):
 @router.post("/logout", status_code=200)
 async def logout(response: Response, session_id: Optional[str] = Cookie(None), user_id: int = Depends(get_current_user)):
     """로그아웃 API (쿠키-세션 방식)"""
-    result = AuthController.logout(session_id)
+    result = auth_controller.logout(session_id)
     
     # 쿠키 삭제 (HTTP 응답 처리)
     response.delete_cookie(key="session_id")
@@ -58,4 +56,4 @@ async def logout(response: Response, session_id: Optional[str] = Cookie(None), u
 @router.get("/me", status_code=200)
 async def get_me(user_id: int = Depends(get_current_user)):
     """로그인 상태 체크 API (쿠키-세션 방식)"""
-    return AuthController.get_me(user_id)
+    return auth_controller.get_me(user_id)

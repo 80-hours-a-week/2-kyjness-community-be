@@ -1,7 +1,7 @@
 # app/likes/likes_route.py
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Path
 from fastapi.responses import Response
-from app.likes.likes_controller import LikesController
+from app.likes import likes_controller
 from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/posts/{post_id}/likes", tags=["likes"])
@@ -9,11 +9,11 @@ router = APIRouter(prefix="/posts/{post_id}/likes", tags=["likes"])
 # 좋아요 추가
 @router.post("", status_code=201)
 async def create_like(
-    post_id: int,
+    post_id: int = Path(..., ge=1, description="게시글 ID"),
     user_id: int = Depends(get_current_user)
 ):
     """좋아요 추가 API"""
-    return LikesController.create_like(
+    return likes_controller.create_like(
         post_id=post_id,
         user_id=user_id
     )
@@ -21,11 +21,11 @@ async def create_like(
 # 좋아요 취소
 @router.delete("", status_code=204)
 async def delete_like(
-    post_id: int,
+    post_id: int = Path(..., ge=1, description="게시글 ID"),
     user_id: int = Depends(get_current_user)
 ):
     """좋아요 취소 API"""
-    LikesController.delete_like(
+    likes_controller.delete_like(
         post_id=post_id,
         user_id=user_id
     )

@@ -1,4 +1,5 @@
 # main.py
+import time
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -15,6 +16,39 @@ app = FastAPI(
     description="커뮤니티 백엔드 API",
     version="1.0.0"
 )
+
+@app.middleware("http")
+async def global_policy_middleware(request: Request, call_next):
+    """전역 공통 정책 미들웨어.
+
+    - 전역 Rate Limiting (가능한 빨리 차단)
+    - 요청 처리 시간 측정 (X-Process-Time 헤더)
+    """
+    start_time = time.perf_counter()
+
+    # 문서/헬스체크/정적 리소스 등은 전역 Rate Limiting 대상에서 제외
+    path = request.url.path
+    skip_prefixes = ("/docs", "/redoc", "/openapi.json", "/public")
+    skip_exact = {"/", "/health"}
+
+    if path not in skip_exact and not path.startswith(skip_prefixes):
+        # 로컬 개발/학습용: 간단히 IP 기반으로 제한
+        # (리버스 프록시 환경이면 X-Forwarded-For를 고려해야 함)
+        client_ip = request.client.host if request.client else "unknown"
+
+        from app.auth.auth_model import AuthModel  # 순환 import 방지용 지연 import
+
+        if not AuthModel.check_rate_limit(client_ip):
+            response = JSONResponse(
+                status_code=429,
+                content={"code": "RATE_LIMIT_EXCEEDED", "data": None},
+            )
+            response.headers["X-Process-Time"] = str(time.perf_counter() - start_time)
+            return response
+
+    response = await call_next(request)
+    response.headers["X-Process-Time"] = str(time.perf_counter() - start_time)
+    return response
 
 # CORS 설정 (프론트엔드와 연결할 때 필요)
 app.add_middleware(

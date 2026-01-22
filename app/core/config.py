@@ -29,8 +29,8 @@ class Settings:
     MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB (바이트)
     ALLOWED_IMAGE_TYPES: List[str] = [img_type.strip() for img_type in os.getenv("ALLOWED_IMAGE_TYPES", "image/jpeg,image/jpg,image/png").split(",")]
     
-    # API 기본 URL
-    BE_API_URL: str = os.getenv("BE_API_URL", "{BE-API-URL}")
+    # API 기본 URL (파일 업로드 URL 생성용)
+    BE_API_URL: str = os.getenv("BE_API_URL", "http://localhost:8000")
 
 # 전역 설정 인스턴스
 settings = Settings()

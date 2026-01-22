@@ -22,6 +22,8 @@ venv.bak/
 .env
 .env.local
 .env.*.local
+.env.test
+.env.production
 
 # IDE / Editors
 # PyCharm / IntelliJ IDEA
@@ -81,3 +83,23 @@ logs/
 tmp/
 temp/
 *.tmp
+
+# Type checking
+# 타입 체커 캐시
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Jupyter Notebook
+# Jupyter 노트북 체크포인트
+.ipynb_checkpoints
+
+# pyenv
+# Python 버전 관리
+.python-version
+
+# Backup files
+# 백업 파일
+*.bak
+*.backup
+*~

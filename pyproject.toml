@@ -1,9 +1,11 @@
 [project]
 name = "puppytalk-api"
 version = "1.0.0"
-description = "커뮤니티 백엔드 API 서버"
+description = "FastAPI 기반의 커뮤니티 백엔드 API 서버"
 readme = "README.md"
 requires-python = ">=3.8"
+license = {text = "MIT"}
+keywords = ["fastapi", "api", "community", "backend"]
 dependencies = [
     "fastapi==0.104.1",
     "uvicorn[standard]==0.24.0",

@@ -8,19 +8,25 @@ FastAPI 기반의 커뮤니티 백엔드 API 서버입니다.
 .
 ├── app/                    # 애플리케이션 코드
 │   ├── core/              # 공통 모듈 (설정, 의존성)
+│   │   ├── __init__.py
 │   │   ├── config.py      # 설정 관리
-│   │   └── dependencies.py # 공통 의존성 (인증 등)
+│   │   ├── dependencies.py # 공통 의존성 (인증 등)
+│   │   ├── exception_handlers.py # 예외 핸들러
+│   │   ├── logging_config.py # 로깅 설정
+│   │   └── middleware.py  # 미들웨어 (Rate Limiting 등)
 │   ├── auth/              # 인증 모듈
+│   │   ├── auth_controller.py
+│   │   ├── auth_model.py
+│   │   ├── auth_route.py
+│   │   └── auth_scheme.py
 │   ├── users/             # 사용자 모듈
 │   ├── posts/             # 게시글 모듈
 │   ├── comments/          # 댓글 모듈
 │   └── likes/             # 좋아요 모듈
-├── tests/                 # 테스트 코드
-│   ├── test_auth.py       # 인증 테스트
-│   └── test_posts.py      # 게시글 테스트
 ├── main.py                # FastAPI 애플리케이션 진입점
 ├── pyproject.toml         # Python 프로젝트 설정 및 의존성
 ├── .env.example          # 환경 변수 예시 파일
+├── .gitignore            # Git 무시 파일 목록
 └── README.md             # 프로젝트 문서
 ```
 
@@ -53,10 +59,13 @@ poetry install
 `.env.example` 파일을 참고하여 `.env` 파일을 생성하세요.
 
 ```bash
-# .env.example을 복사하여 .env 파일 생성
+# Windows
+copy .env.example .env
+
+# Linux/Mac
 cp .env.example .env
 
-# 또는 직접 .env 파일 생성
+# 또는 직접 .env 파일 생성 후 아래 내용 입력
 ```
 
 ### 4. 서버 실행
@@ -79,7 +88,9 @@ uvicorn main:app --host ${HOST} --port ${PORT}
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
-### 6. 테스트 실행
+### 6. 테스트 실행 (선택사항)
+
+테스트 코드는 `tests/` 디렉토리에 작성할 수 있습니다.
 
 ```bash
 # 모든 테스트 실행
@@ -126,9 +137,9 @@ pytest --cov=app
 - `SESSION_EXPIRY_TIME`: 세션 만료 시간 (초, 기본값: 86400)
 - `RATE_LIMIT_WINDOW`: Rate limiting 윈도우 (초, 기본값: 60)
 - `RATE_LIMIT_MAX_REQUESTS`: 최대 요청 수 (기본값: 10)
-- `MAX_FILE_SIZE`: 최대 파일 크기 (바이트, 기본값: 10485760)
-- `ALLOWED_IMAGE_TYPES`: 허용된 이미지 타입 (쉼표로 구분)
-- `BE_API_URL`: API 기본 URL
+- `MAX_FILE_SIZE`: 최대 파일 크기 (바이트, 기본값: 10485760 = 10MB)
+- `ALLOWED_IMAGE_TYPES`: 허용된 이미지 타입 (쉼표로 구분, 기본값: image/jpeg,image/jpg,image/png)
+- `BE_API_URL`: API 기본 URL (파일 업로드 URL 생성용, 예: http://localhost:8000 또는 https://api.example.com)
 
 ## 데이터 저장
 

@@ -11,10 +11,10 @@ def create_like(post_id: int, user_id: int):
     if not post:
         raise_http_error(404, "POST_NOT_FOUND")
     if LikesModel.has_liked(post_id, user_id):
-        raise_http_error(400, "ALREADY_LIKED")
+        raise_http_error(409, "CONFLICT")
     like = LikesModel.create_like(post_id, user_id)
     if not like:
-        raise_http_error(400, "ALREADY_LIKED")
+        raise_http_error(409, "CONFLICT")
     PostsModel.increment_like_count(post_id)
     updated_post = PostsModel.find_post_by_id(post_id)
     like_count = updated_post["likeCount"] if updated_post else 0

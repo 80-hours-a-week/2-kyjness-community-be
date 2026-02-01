@@ -27,17 +27,17 @@ class CommentsModel:
     @classmethod
     def create_comment(cls, post_id: int, user_id: int, content: str) -> dict:
         """댓글 생성"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO comments (post_id, author_id, content)
-                VALUES (%s, %s, %s)
-                """,
-                (post_id, user_id, content),
-            )
-            comment_id = cur.lastrowid
-        conn.commit()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO comments (post_id, author_id, content)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (post_id, user_id, content),
+                )
+                comment_id = cur.lastrowid
+            conn.commit()
         return {
             "commentId": comment_id,
             "postId": post_id,
@@ -49,16 +49,16 @@ class CommentsModel:
     @classmethod
     def find_comment_by_id(cls, comment_id: int) -> Optional[dict]:
         """댓글 조회"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT id, post_id, author_id, content, created_at
-                FROM comments WHERE id = %s AND deleted_at IS NULL
-                """,
-                (comment_id,),
-            )
-            row = cur.fetchone()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, post_id, author_id, content, created_at
+                    FROM comments WHERE id = %s AND deleted_at IS NULL
+                    """,
+                    (comment_id,),
+                )
+                row = cur.fetchone()
         return cls._row_to_comment(row) if row else None
 
     @classmethod
@@ -66,68 +66,68 @@ class CommentsModel:
         cls, post_id: int, page: int = 1, size: int = 20
     ) -> List[dict]:
         """특정 게시글의 댓글 목록 (페이징)"""
-        conn = get_connection()
         offset = (page - 1) * size
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT id, post_id, author_id, content, created_at
-                FROM comments
-                WHERE post_id = %s AND deleted_at IS NULL
-                ORDER BY id DESC
-                LIMIT %s OFFSET %s
-                """,
-                (post_id, size, offset),
-            )
-            rows = cur.fetchall()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, post_id, author_id, content, created_at
+                    FROM comments
+                    WHERE post_id = %s AND deleted_at IS NULL
+                    ORDER BY id DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (post_id, size, offset),
+                )
+                rows = cur.fetchall()
         return [cls._row_to_comment(r) for r in rows]
 
     @classmethod
     def update_comment(cls, comment_id: int, content: str) -> bool:
         """댓글 수정"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE comments SET content = %s WHERE id = %s AND deleted_at IS NULL",
-                (content, comment_id),
-            )
-            affected = cur.rowcount
-        conn.commit()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE comments SET content = %s WHERE id = %s AND deleted_at IS NULL",
+                    (content, comment_id),
+                )
+                affected = cur.rowcount
+            conn.commit()
         return affected > 0
 
     @classmethod
     def delete_comment(cls, comment_id: int) -> bool:
         """댓글 삭제 (soft delete)"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE comments SET deleted_at = NOW() WHERE id = %s",
-                (comment_id,),
-            )
-            affected = cur.rowcount
-        conn.commit()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE comments SET deleted_at = NOW() WHERE id = %s",
+                    (comment_id,),
+                )
+                affected = cur.rowcount
+            conn.commit()
         return affected > 0
 
     @classmethod
     def get_comment_author_id(cls, comment_id: int) -> Optional[int]:
         """댓글 작성자 ID 조회"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT author_id FROM comments WHERE id = %s AND deleted_at IS NULL",
-                (comment_id,),
-            )
-            row = cur.fetchone()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT author_id FROM comments WHERE id = %s AND deleted_at IS NULL",
+                    (comment_id,),
+                )
+                row = cur.fetchone()
         return row["author_id"] if row else None
 
     @classmethod
     def get_comment_post_id(cls, comment_id: int) -> Optional[int]:
         """댓글의 게시글 ID 조회"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT post_id FROM comments WHERE id = %s AND deleted_at IS NULL",
-                (comment_id,),
-            )
-            row = cur.fetchone()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT post_id FROM comments WHERE id = %s AND deleted_at IS NULL",
+                    (comment_id,),
+                )
+                row = cur.fetchone()
         return row["post_id"] if row else None

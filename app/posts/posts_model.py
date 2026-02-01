@@ -39,29 +39,29 @@ class PostsModel:
         cls, user_id: int, title: str, content: str, file_url: str = ""
     ) -> dict:
         """게시글 생성"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO posts (user_id, title, content)
-                VALUES (%s, %s, %s)
-                """,
-                (user_id, title, content),
-            )
-            post_id = cur.lastrowid
-
-            file_id = None
-            if file_url:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO post_files (post_id, file_url)
-                    VALUES (%s, %s)
+                    INSERT INTO posts (user_id, title, content)
+                    VALUES (%s, %s, %s)
                     """,
-                    (post_id, file_url),
+                    (user_id, title, content),
                 )
-                file_id = cur.lastrowid
+                post_id = cur.lastrowid
 
-        conn.commit()
+                file_id = None
+                if file_url:
+                    cur.execute(
+                        """
+                        INSERT INTO post_files (post_id, file_url)
+                        VALUES (%s, %s)
+                        """,
+                        (post_id, file_url),
+                    )
+                    file_id = cur.lastrowid
+
+            conn.commit()
 
         file_info = (
             {"fileId": file_id, "fileUrl": file_url} if file_url and file_id else None
@@ -81,51 +81,51 @@ class PostsModel:
     @classmethod
     def find_post_by_id(cls, post_id: int) -> Optional[dict]:
         """게시글 조회"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT id, user_id, title, content, view_count, like_count, comment_count, created_at
-                FROM posts WHERE id = %s AND deleted_at IS NULL
-                """,
-                (post_id,),
-            )
-            row = cur.fetchone()
-            if not row:
-                return None
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, user_id, title, content, view_count, like_count, comment_count, created_at
+                    FROM posts WHERE id = %s AND deleted_at IS NULL
+                    """,
+                    (post_id,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
 
-            cur.execute(
-                "SELECT id, file_url FROM post_files WHERE post_id = %s AND deleted_at IS NULL LIMIT 1",
-                (post_id,),
-            )
-            file_row = cur.fetchone()
+                cur.execute(
+                    "SELECT id, file_url FROM post_files WHERE post_id = %s AND deleted_at IS NULL LIMIT 1",
+                    (post_id,),
+                )
+                file_row = cur.fetchone()
 
         return cls._row_to_post(row, file_row)
 
     @classmethod
     def get_all_posts(cls, page: int = 1, size: int = 20) -> List[dict]:
         """페이징 목록 조회"""
-        conn = get_connection()
         offset = (page - 1) * size
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT id, user_id, title, content, view_count, like_count, comment_count, created_at
-                FROM posts WHERE deleted_at IS NULL
-                ORDER BY id DESC LIMIT %s OFFSET %s
-                """,
-                (size, offset),
-            )
-            rows = cur.fetchall()
-
-            result = []
-            for row in rows:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT id, file_url FROM post_files WHERE post_id = %s AND deleted_at IS NULL LIMIT 1",
-                    (row["id"],),
+                    """
+                    SELECT id, user_id, title, content, view_count, like_count, comment_count, created_at
+                    FROM posts WHERE deleted_at IS NULL
+                    ORDER BY id DESC LIMIT %s OFFSET %s
+                    """,
+                    (size, offset),
                 )
-                file_row = cur.fetchone()
-                result.append(cls._row_to_post(row, file_row))
+                rows = cur.fetchall()
+
+                result = []
+                for row in rows:
+                    cur.execute(
+                        "SELECT id, file_url FROM post_files WHERE post_id = %s AND deleted_at IS NULL LIMIT 1",
+                        (row["id"],),
+                    )
+                    file_row = cur.fetchone()
+                    result.append(cls._row_to_post(row, file_row))
 
         return result
 
@@ -138,127 +138,127 @@ class PostsModel:
         file_url: Optional[str] = None,
     ) -> bool:
         """게시글 수정"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            if title is not None:
-                cur.execute(
-                    "UPDATE posts SET title = %s WHERE id = %s AND deleted_at IS NULL",
-                    (title, post_id),
-                )
-            if content is not None:
-                cur.execute(
-                    "UPDATE posts SET content = %s WHERE id = %s AND deleted_at IS NULL",
-                    (content, post_id),
-                )
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                if title is not None:
+                    cur.execute(
+                        "UPDATE posts SET title = %s WHERE id = %s AND deleted_at IS NULL",
+                        (title, post_id),
+                    )
+                if content is not None:
+                    cur.execute(
+                        "UPDATE posts SET content = %s WHERE id = %s AND deleted_at IS NULL",
+                        (content, post_id),
+                    )
 
-            if file_url is not None:
-                cur.execute(
-                    "SELECT id FROM post_files WHERE post_id = %s AND deleted_at IS NULL LIMIT 1",
-                    (post_id,),
-                )
-                existing = cur.fetchone()
-                if file_url:
-                    if existing:
-                        cur.execute(
-                            "UPDATE post_files SET file_url = %s WHERE id = %s",
-                            (file_url, existing["id"]),
-                        )
+                if file_url is not None:
+                    cur.execute(
+                        "SELECT id FROM post_files WHERE post_id = %s AND deleted_at IS NULL LIMIT 1",
+                        (post_id,),
+                    )
+                    existing = cur.fetchone()
+                    if file_url:
+                        if existing:
+                            cur.execute(
+                                "UPDATE post_files SET file_url = %s WHERE id = %s",
+                                (file_url, existing["id"]),
+                            )
+                        else:
+                            cur.execute(
+                                "INSERT INTO post_files (post_id, file_url) VALUES (%s, %s)",
+                                (post_id, file_url),
+                            )
                     else:
-                        cur.execute(
-                            "INSERT INTO post_files (post_id, file_url) VALUES (%s, %s)",
-                            (post_id, file_url),
-                        )
-                else:
-                    if existing:
-                        cur.execute(
-                            "UPDATE post_files SET deleted_at = NOW() WHERE id = %s",
-                            (existing["id"],),
-                        )
+                        if existing:
+                            cur.execute(
+                                "UPDATE post_files SET deleted_at = NOW() WHERE id = %s",
+                                (existing["id"],),
+                            )
 
-        conn.commit()
+            conn.commit()
         return True
 
     @classmethod
     def delete_post(cls, post_id: int) -> bool:
         """게시글 삭제 (soft delete)"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE posts SET deleted_at = NOW() WHERE id = %s",
-                (post_id,),
-            )
-            affected = cur.rowcount
-        conn.commit()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE posts SET deleted_at = NOW() WHERE id = %s",
+                    (post_id,),
+                )
+                affected = cur.rowcount
+            conn.commit()
         return affected > 0
 
     @classmethod
     def increment_hits(cls, post_id: int) -> bool:
         """조회수 증가"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE posts SET view_count = view_count + 1 WHERE id = %s AND deleted_at IS NULL",
-                (post_id,),
-            )
-        conn.commit()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE posts SET view_count = view_count + 1 WHERE id = %s AND deleted_at IS NULL",
+                    (post_id,),
+                )
+            conn.commit()
         return True
 
     @classmethod
     def increment_like_count(cls, post_id: int) -> bool:
         """좋아요 수 증가"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE posts SET like_count = like_count + 1 WHERE id = %s",
-                (post_id,),
-            )
-        conn.commit()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE posts SET like_count = like_count + 1 WHERE id = %s",
+                    (post_id,),
+                )
+            conn.commit()
         return True
 
     @classmethod
     def decrement_like_count(cls, post_id: int) -> bool:
         """좋아요 수 감소"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE posts SET like_count = GREATEST(0, like_count - 1) WHERE id = %s",
-                (post_id,),
-            )
-        conn.commit()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE posts SET like_count = GREATEST(0, like_count - 1) WHERE id = %s",
+                    (post_id,),
+                )
+            conn.commit()
         return True
 
     @classmethod
     def increment_comment_count(cls, post_id: int) -> bool:
         """댓글 수 증가"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE posts SET comment_count = comment_count + 1 WHERE id = %s",
-                (post_id,),
-            )
-        conn.commit()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE posts SET comment_count = comment_count + 1 WHERE id = %s",
+                    (post_id,),
+                )
+            conn.commit()
         return True
 
     @classmethod
     def decrement_comment_count(cls, post_id: int) -> bool:
         """댓글 수 감소"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE posts SET comment_count = GREATEST(0, comment_count - 1) WHERE id = %s",
-                (post_id,),
-            )
-        conn.commit()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE posts SET comment_count = GREATEST(0, comment_count - 1) WHERE id = %s",
+                    (post_id,),
+                )
+            conn.commit()
         return True
 
     @classmethod
     def get_post_author_id(cls, post_id: int) -> Optional[int]:
         """게시글 작성자 ID 조회"""
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT user_id FROM posts WHERE id = %s AND deleted_at IS NULL",
-                (post_id,),
-            )
-            row = cur.fetchone()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT user_id FROM posts WHERE id = %s AND deleted_at IS NULL",
+                    (post_id,),
+                )
+                row = cur.fetchone()
         return row["user_id"] if row else None

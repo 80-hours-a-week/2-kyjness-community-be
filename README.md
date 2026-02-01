@@ -182,3 +182,46 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
    - `fetch` 사용 시: `credentials: 'include'` 옵션 추가
    - `axios` 사용 시: `withCredentials: true` 설정
 3. 로그인 성공 시 서버가 `session_id`를 **Set-Cookie**로 보내므로, 이후 요청에는 브라우저가 자동으로 이 쿠키를 붙여 보냅니다.
+
+---
+
+## 확장 전략 개념 정리
+
+- **DB 수평 확장(샤딩)**: 현재 단일 MySQL 인스턴스 사용. 확장 시 user_id 또는 post_id 기준으로 샤딩 키를 정하여 테이블을 여러 노드에 분산 배치할 수 있다.
+- **읽기 전용 레플리카**: 쓰기는 Primary, 조회는 Replica로 분리하여 읽기 부하를 분산할 수 있다. `get_connection()`에서 read/write 구분하여 커넥션을 선택하도록 확장 가능.
+- **캐시 레이어**: 자주 조회되는 게시글·댓글 목록에 Redis 캐시를 도입하면 DB 부하를 줄일 수 있다.
+- **메시지 큐**: 이미지 업로드·알림 등 비동기 작업은 Celery/RQ + Redis로 분리하면 API 응답 지연을 줄일 수 있다.
+- **API 게이트웨이**: 서비스가 커지면 Kong, Nginx 등으로 인증·로드밸런싱·레이트리밋을 중앙화할 수 있다.
+
+---
+
+## Postman 테스트 시나리오 표
+
+모든 성공·실패 응답은 `{ "code": "<string>", "data": <any or null> }` 형식으로 통일됩니다.
+
+| 엔드포인트 | 요청 예시 | 상태코드 | code | data |
+|-----------|----------|---------|------|------|
+| GET / | - | 200 | OK | `{ message, version, docs }` |
+| POST /auth/signup | 정상 body | 201 | SIGNUP_SUCCESS | null |
+| POST /auth/signup | 중복 email | 409 | EMAIL_ALREADY_EXISTS | null |
+| POST /auth/signup | 잘못된 body(비밀번호 형식 등) | 400 | INVALID_REQUEST_BODY 등 | null |
+| POST /auth/login | 정상 body | 200 | LOGIN_SUCCESS | `{ userId, email, nickname, profileImageUrl }` |
+| POST /auth/login | 잘못된 이메일/비밀번호 | 401 | INVALID_CREDENTIALS | null |
+| GET /auth/me | 쿠키 없음 | 401 | UNAUTHORIZED | null |
+| GET /auth/me | 정상 쿠키 | 200 | AUTH_SUCCESS | `{ userId, email, nickname, profileImageUrl }` |
+| GET /posts | page=1, size=10 | 200 | POSTS_RETRIEVED | `[ { postId, title, author, ... } ]` |
+| GET /posts | page=0 또는 size=-1 (잘못된 쿼리) | 400 | INVALID_REQUEST | null |
+| GET /posts/99999 | 없는 post_id | 404 | POST_NOT_FOUND | null |
+| GET /posts/abc | post_id가 숫자 아님 | 422 | UNPROCESSABLE_ENTITY | null |
+| POST /posts | 로그인 없음 | 401 | UNAUTHORIZED | null |
+| PATCH /posts/1 | 타인 게시글 수정 시도 | 403 | FORBIDDEN | null |
+| POST /posts/1/likes | 정상 | 201 | POSTLIKE_UPLOADED | `{ likeCount }` |
+| POST /posts/1/likes | 이미 좋아요한 상태(중복) | 409 | CONFLICT | null |
+| POST /posts/99999/likes | 없는 post_id | 404 | POST_NOT_FOUND | null |
+| DELETE /posts/1/likes | 정상 | 204 | (본문 없음) | - |
+| DELETE /posts/1/likes | 좋아요 안 한 상태 | 404 | LIKE_NOT_FOUND | null |
+| GET /posts/1/comments | 정상 | 200 | COMMENTS_RETRIEVED | `[ { commentId, content, author, ... } ]` |
+| POST /posts/99999/comments | 없는 post_id | 404 | POST_NOT_FOUND | null |
+| PATCH /posts/1/comments/1 | 타인 댓글 수정 시도 | 403 | FORBIDDEN | null |
+| GET /users?email= | email/nickname 둘 다 없음 | 400 | INVALID_REQUEST | null |
+| DELETE /users/me | 정상 | 204 | (본문 없음) | - |

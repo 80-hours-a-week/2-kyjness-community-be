@@ -28,7 +28,12 @@
 ## 실행 전 준비
 
 - **Python 3.8 이상**이 설치되어 있어야 합니다.
-- **MySQL**이 설치·실행 중이어야 합니다. `puppytalk` 데이터베이스와 필요한 테이블(users, posts, comments 등)을 미리 만들어 두어야 합니다. (DBeaver 등 DB 도구로 생성)
+- **MySQL**이 설치·실행 중이어야 합니다. `puppytalk` 데이터베이스를 생성한 뒤, `docs/puppyytalkdb.sql` 스크립트를 실행해 테이블을 생성하세요.
+
+  ```bash
+  mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS puppytalk;"
+  mysql -u root -p puppytalk < docs/puppyytalkdb.sql
+  ```
 
 ---
 
@@ -36,22 +41,76 @@
 
 ![ERD](docs/erd.png)
 
-테이블 관계는 `docs/erd.png`를 참고하세요.
+테이블 관계는 `docs/erd.png`를 참고하고, DDL은 `docs/puppyytalkdb.sql`을 사용하세요.
 
 ---
 
-## 요청이 처리되는 흐름
+## 요청이 처리되는 흐름 (전체 아키텍처)
+
+API 요청이 들어왔을 때 어떤 순서로 어떤 개념이 적용되는지 이해할 수 있도록 흐름을 정리했습니다.
+
+### 1. 전체 흐름도
 
 ```
-[프론트엔드/클라이언트] 
-    → CORS 체크 (다른 도메인에서 오는 요청 허용 여부)
-    → 보안 헤더 추가
-    → Route (URL에 따른 분기) → Controller (비즈니스 로직) → Model (DB 접근)
-    ← { "code": "성공코드", "data": 결과데이터 }
+[프론트엔드 / 클라이언트]  HTTP 요청 (JSON body, Cookie)
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  백엔드 (FastAPI)                                                        │
+│                                                                         │
+│  ① Lifespan (앱 시작 시)     → init_database() : DB 연결 확인            │
+│                                                                         │
+│  ② 미들웨어 (요청 진입 시, 역순 적용)                                    │
+│     └─ CORS (CORSMiddleware)  → Origin 검사, credentials 허용            │
+│     └─ add_security_headers   → X-Frame-Options, X-Content-Type-Options  │
+│                                                                         │
+│  ③ 라우터 매칭              → /posts, /auth/login 등 URL·메서드 분기     │
+│                                                                         │
+│  ④ 의존성 주입 (Depends)    → get_current_user(쿠키 → 세션 → user_id)    │
+│                            → require_post_author (작성자 본인인지 확인)   │
+│                                                                         │
+│  ⑤ Pydantic 검증            → PostCreateRequest 등 스키마로 body 검증    │
+│                            → 실패 시 RequestValidationError → 400       │
+│                                                                         │
+│  ⑥ Route 핸들러             → posts_controller.create_post() 호출        │
+│                                                                         │
+│  ⑦ Controller (비즈니스 로직) → Model 호출, 응답 포맷 생성                │
+│                                                                         │
+│  ⑧ Model (DB 접근)          → get_connection() → SQL 실행 → conn.commit  │
+│                            → 트랜잭션: autocommit=False, 명시적 commit   │
+│                                                                         │
+│  ⑨ 예외 핸들러 (발생 시)    → IntegrityError, HTTPException 등           │
+│                            → { "code": "CONFLICT", "data": null } 등    │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+    HTTP 응답  { "code": "POST_UPLOADED", "data": { "postId": 1 } }
 ```
 
-- **Route → Controller → Model**: URL 요청을 받아 라우트에서 분기하고, 컨트롤러에서 로직을 처리한 뒤, 모델을 통해 DB에 접근하는 구조입니다.
-- **로그인 인증**: 로그인하면 `session_id`가 쿠키로 저장되고, 인증이 필요한 API는 이 쿠키를 확인해 누가 요청했는지 판단합니다.
+### 2. 계층별 역할과 적용 개념
+
+| 계층 | 역할 |
+|-----|-----|
+| Lifespan | 서버 시작 시 DB 연결 확인 |
+| Middleware | CORS 처리, 기본 보안 헤더 설정 |
+| Router | URL·HTTP 메서드별 API 분기 |
+| Dependencies | 인증(session_id), 권한 검사 |
+| Schema (Pydantic) | 요청 데이터 검증 |
+| Controller | 비즈니스 로직 처리 |
+| Model | SQL 실행 및 트랜잭션 관리 |
+| Exception Handler | 에러 응답 포맷 통일 |
+
+### 3. 요청 처리 예시 (게시글 작성)
+
+- 인증: Cookie의 `session_id`로 사용자 식별
+- 검증: Pydantic 스키마로 요청 body 검증
+- 처리: Controller → Model → DB 트랜잭션
+- 응답: `{ "code": "POST_UPLOADED", "data": { "postId": 5 } }`
+
+### 4. 인증·응답 형식
+
+- **인증**: 로그인 시 `session_id`를 **Set-Cookie**로 전달. 이후 요청 시 브라우저가 자동으로 쿠키 포함.
 - **응답 형식**: 성공·실패 모두 `{ "code": "문자열", "data": ... }` 형태로 통일됩니다.
 
 ---
@@ -107,7 +166,8 @@
 │   │   └── post/                  # 게시글 이미지
 │
 ├── docs/                          # 문서
-│   └── erd.png                    # 데이터베이스 ERD
+│   ├── erd.png                    # 데이터베이스 ERD
+│   └── puppyytalkdb.sql           # DB 테이블 생성 스크립트
 │
 ├── main.py                        # 앱 진입점, lifespan, 미들웨어(CORS, 보안헤더), 라우터 등록, StaticFiles(/public)
 ├── pyproject.toml                 # 의존성 패키지 목록
@@ -138,23 +198,13 @@ pip install -e ".[dev]"
 
 ### 2. 환경 변수 파일 만들기
 
-프로젝트 **루트 폴더**(`main.py`가 있는 위치)에 `.env` 파일을 만들고, 아래 변수들을 설정합니다. 값은 환경에 맞게 수정하세요.
+루트에 `.env`를 두고 아래 변수를 설정한다. MySQL은 `DATABASE_URL`(`mysql+pymysql://사용자:비밀번호@호스트:포트/DB이름`) 또는 개별 `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` 사용. 없으면 localhost/root 등 기본값 적용.
 
-| 변수 | 설명 | 예시 |
-|------|------|------|
-| `HOST` | 서버가 바인딩할 주소 | 0.0.0.0 |
-| `PORT` | 서버 포트 | 8000 |
-| `DEBUG` | 디버그 모드 여부 | True |
-| `CORS_ORIGINS` | API를 호출할 수 있는 프론트 주소들. 쉼표로 구분. credentials 사용 시 `*`는 사용할 수 없습니다. | http://localhost:3000,http://127.0.0.1:3000 |
-| `SESSION_EXPIRY_TIME` | 세션 유효 시간(초) | 86400 (24시간) |
-| `MAX_FILE_SIZE` | 파일 업로드 최대 크기(바이트) | 10485760 (10MB) |
-| `ALLOWED_IMAGE_TYPES` | 허용 이미지 타입 | image/jpeg,image/jpg,image/png |
-| `BE_API_URL` | 이 API 서버의 기본 URL (업로드된 파일 URL 생성에 사용) | http://localhost:8000 |
-| `DB_HOST` | MySQL 호스트 | localhost |
-| `DB_PORT` | MySQL 포트 | 3306 |
-| `DB_USER` | MySQL 사용자명 | root |
-| `DB_PASSWORD` | MySQL 비밀번호 | (본인 설정값) |
-| `DB_NAME` | 사용할 DB 이름 | puppytalk |
+- `HOST`, `PORT`, `DEBUG` — 서버 설정
+- `CORS_ORIGINS` — 프론트 주소 (쉼표 구분, credentials 사용 시 `*` 불가)
+- `SESSION_EXPIRY_TIME` — 세션 유효 시간(초)
+- `MAX_FILE_SIZE`, `ALLOWED_IMAGE_TYPES` — 파일 업로드
+- `BE_API_URL` — API 기본 URL
 
 ### 3. 서버 실행
 
@@ -194,34 +244,3 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 - **API 게이트웨이**: 서비스가 커지면 Kong, Nginx 등으로 인증·로드밸런싱·레이트리밋을 중앙화할 수 있다.
 
 ---
-
-## Postman 테스트 시나리오 표
-
-모든 성공·실패 응답은 `{ "code": "<string>", "data": <any or null> }` 형식으로 통일됩니다.
-
-| 엔드포인트 | 요청 예시 | 상태코드 | code | data |
-|-----------|----------|---------|------|------|
-| GET / | - | 200 | OK | `{ message, version, docs }` |
-| POST /auth/signup | 정상 body | 201 | SIGNUP_SUCCESS | null |
-| POST /auth/signup | 중복 email | 409 | EMAIL_ALREADY_EXISTS | null |
-| POST /auth/signup | 잘못된 body(비밀번호 형식 등) | 400 | INVALID_REQUEST_BODY 등 | null |
-| POST /auth/login | 정상 body | 200 | LOGIN_SUCCESS | `{ userId, email, nickname, profileImageUrl }` |
-| POST /auth/login | 잘못된 이메일/비밀번호 | 401 | INVALID_CREDENTIALS | null |
-| GET /auth/me | 쿠키 없음 | 401 | UNAUTHORIZED | null |
-| GET /auth/me | 정상 쿠키 | 200 | AUTH_SUCCESS | `{ userId, email, nickname, profileImageUrl }` |
-| GET /posts | page=1, size=10 | 200 | POSTS_RETRIEVED | `[ { postId, title, author, ... } ]` |
-| GET /posts | page=0 또는 size=-1 (잘못된 쿼리) | 400 | INVALID_REQUEST | null |
-| GET /posts/99999 | 없는 post_id | 404 | POST_NOT_FOUND | null |
-| GET /posts/abc | post_id가 숫자 아님 | 422 | UNPROCESSABLE_ENTITY | null |
-| POST /posts | 로그인 없음 | 401 | UNAUTHORIZED | null |
-| PATCH /posts/1 | 타인 게시글 수정 시도 | 403 | FORBIDDEN | null |
-| POST /posts/1/likes | 정상 | 201 | POSTLIKE_UPLOADED | `{ likeCount }` |
-| POST /posts/1/likes | 이미 좋아요한 상태(중복) | 409 | CONFLICT | null |
-| POST /posts/99999/likes | 없는 post_id | 404 | POST_NOT_FOUND | null |
-| DELETE /posts/1/likes | 정상 | 204 | (본문 없음) | - |
-| DELETE /posts/1/likes | 좋아요 안 한 상태 | 404 | LIKE_NOT_FOUND | null |
-| GET /posts/1/comments | 정상 | 200 | COMMENTS_RETRIEVED | `[ { commentId, content, author, ... } ]` |
-| POST /posts/99999/comments | 없는 post_id | 404 | POST_NOT_FOUND | null |
-| PATCH /posts/1/comments/1 | 타인 댓글 수정 시도 | 403 | FORBIDDEN | null |
-| GET /users?email= | email/nickname 둘 다 없음 | 400 | INVALID_REQUEST | null |
-| DELETE /users/me | 정상 | 204 | (본문 없음) | - |

@@ -20,10 +20,17 @@ venv.bak/
 # Environment variables
 # 환경 변수 파일 (민감한 정보 포함)
 .env
+.env.dev
 .env.local
 .env.*.local
 .env.test
 .env.production
+
+# 업로드된 이미지 (폴더 구조는 .gitkeep으로 유지)
+public/image/profile/*
+!public/image/profile/.gitkeep
+public/image/post/*
+!public/image/post/.gitkeep
 
 # IDE / Editors
 # PyCharm / IntelliJ IDEA

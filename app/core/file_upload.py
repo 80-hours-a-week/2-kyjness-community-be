@@ -1,5 +1,5 @@
 # app/core/file_upload.py
-"""파일 업로드: 검증, 저장, URL 생성. 프로필/게시글 이미지 정책."""
+"""파일 업로드: 검증, 저장, URL 생성. 프로필/게시글 이미지 정책. local | S3 지원."""
 
 import uuid
 from pathlib import Path
@@ -14,10 +14,34 @@ PROFILE_ALLOWED_TYPES = ["image/jpeg", "image/jpg"]
 POST_ALLOWED_TYPES = settings.ALLOWED_IMAGE_TYPES
 MAX_FILE_SIZE = settings.MAX_FILE_SIZE
 
-# 프로젝트 루트 기준 public 폴더 (main.py에서 StaticFiles 마운트)
+# 프로젝트 루트 기준 public 폴더 (STORAGE_BACKEND=local 시, main.py에서 StaticFiles 마운트)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 PUBLIC_PROFILE_DIR = PROJECT_ROOT / "public" / "image" / "profile"
 PUBLIC_POST_DIR = PROJECT_ROOT / "public" / "image" / "post"
+
+
+def _s3_upload(key: str, content: bytes, content_type: str) -> str:
+    """S3에 업로드 후 공개 URL 반환. STORAGE_BACKEND=s3 일 때만 호출."""
+    import boto3
+    if not settings.S3_BUCKET_NAME or not settings.AWS_ACCESS_KEY_ID or not settings.AWS_SECRET_ACCESS_KEY:
+        raise ValueError("S3_BUCKET_NAME, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY must be set when STORAGE_BACKEND=s3")
+
+    client = boto3.client(
+        "s3",
+        region_name=settings.AWS_REGION,
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+    )
+    client.put_object(
+        Bucket=settings.S3_BUCKET_NAME,
+        Key=key,
+        Body=content,
+        ContentType=content_type,
+    )
+    if settings.S3_PUBLIC_BASE_URL:
+        base = settings.S3_PUBLIC_BASE_URL.rstrip("/")
+        return f"{base}/{key}"
+    return f"https://{settings.S3_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
 
 
 async def _validate_image(
@@ -62,9 +86,7 @@ async def validate_image_upload(
 async def save_profile_image(file: Optional[UploadFile]) -> str:
     """
     프로필 이미지: 검증 + 저장 + URL 반환.
-    - 타입/크기 검증
-    - uuid 파일명으로 public/image/profile에 저장
-    - 접근 가능한 profileImageUrl 반환
+    STORAGE_BACKEND=local → public/image/profile, s3 → S3 버킷 image/profile/
     """
     content = await _validate_image(
         file,
@@ -72,21 +94,20 @@ async def save_profile_image(file: Optional[UploadFile]) -> str:
         max_size=MAX_FILE_SIZE,
     )
 
-    PUBLIC_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid.uuid4().hex}.jpg"
+    if settings.STORAGE_BACKEND == "s3":
+        key = f"image/profile/{filename}"
+        return _s3_upload(key, content, "image/jpeg")
+    PUBLIC_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
     filepath = PUBLIC_PROFILE_DIR / filename
-
     filepath.write_bytes(content)
-
-    profile_image_url = f"{settings.BE_API_URL}/public/image/profile/{filename}"
-    return profile_image_url
+    return f"{settings.BE_API_URL}/public/image/profile/{filename}"
 
 
 async def save_post_image(post_id: int, file: Optional[UploadFile]) -> str:
     """
     게시글 이미지: 검증 + 저장 + URL 반환.
-    - 타입/크기 검증
-    - uuid 파일명으로 public/image/post에 저장
+    STORAGE_BACKEND=local → public/image/post, s3 → S3 버킷 image/post/
     """
     content = await _validate_image(
         file,
@@ -94,16 +115,18 @@ async def save_post_image(post_id: int, file: Optional[UploadFile]) -> str:
         max_size=MAX_FILE_SIZE,
     )
 
-    PUBLIC_POST_DIR.mkdir(parents=True, exist_ok=True)
     ext = "jpg"
     if file.filename and "." in file.filename:
         ext = file.filename.lower().split(".")[-1]
         if ext not in ("jpg", "jpeg", "png"):
             ext = "jpg"
     filename = f"{post_id}_{uuid.uuid4().hex}.{ext}"
+    content_type = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
+
+    if settings.STORAGE_BACKEND == "s3":
+        key = f"image/post/{filename}"
+        return _s3_upload(key, content, content_type)
+    PUBLIC_POST_DIR.mkdir(parents=True, exist_ok=True)
     filepath = PUBLIC_POST_DIR / filename
-
     filepath.write_bytes(content)
-
-    file_url = f"{settings.BE_API_URL}/public/image/post/{filename}"
-    return file_url
+    return f"{settings.BE_API_URL}/public/image/post/{filename}"

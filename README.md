@@ -41,7 +41,7 @@ mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS puppytalk;"
 mysql -u root -p puppytalk < docs/puppyytalkdb.sql
 ```
 
-테이블 관계는 `docs/erd.png`, DDL은 `docs/puppyytalkdb.sql` 참고.
+테이블 관계는 `docs/erd.png`를, DDL은 `docs/puppyytalkdb.sql`을 참고합니다.
 
 ### 2. 가상환경 및 패키지
 
@@ -61,15 +61,33 @@ pip install .
 
 ### 3. 환경 변수
 
-루트에 `.env` 생성. MySQL은 `DATABASE_URL` 또는 `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` 사용.
+**앱이 읽는 파일은 루트의 `.env` 하나뿐입니다.** 저장소에는 견본인 `.env.example`만 올라가며, 로컬/배포 시 `.env.example`을 복사해 `.env`로 저장한 뒤 값을 채우면 됩니다.
+
+루트에 `.env`를 생성합니다 (`.env.example`을 복사한 뒤 값을 채웁니다). MySQL에는 `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`을 사용합니다.
 
 | 변수 | 용도 |
 |------|------|
 | `HOST`, `PORT`, `DEBUG` | 서버 설정 |
 | `CORS_ORIGINS` | 프론트 주소 (쉼표 구분, credentials 시 `*` 불가) |
 | `SESSION_EXPIRY_TIME` | 세션 유효 시간(초) |
+| `RATE_LIMIT_WINDOW`, `RATE_LIMIT_MAX_REQUESTS` | Rate limiting (추후 미들웨어에서 사용 시) |
 | `MAX_FILE_SIZE`, `ALLOWED_IMAGE_TYPES` | 파일 업로드 |
-| `BE_API_URL` | API 기본 URL |
+| `BE_API_URL` | API 기본 URL (local 저장 시 이미지 URL 접두사) |
+| `STORAGE_BACKEND` | `local`(기본) 또는 `s3`. 배포 시 S3 권장 |
+| `S3_BUCKET_NAME`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | S3 사용 시 필수 |
+| `S3_PUBLIC_BASE_URL` | S3 공개 URL 접두사(선택). 비우면 버킷 기본 URL 사용. CloudFront 사용 시 여기 설정 |
+| `LOG_LEVEL` | 로그 레벨: `DEBUG`, `INFO`, `WARNING`, `ERROR` (기본 `INFO`) |
+| `LOG_FILE_PATH` | 비우면 콘솔만. 경로 지정 시 해당 파일로 로테이팅 로그 기록 (예: `logs/app.log`) |
+
+**배포 시 반드시 수정할 항목** (`.env.example`에 `# [배포 시 수정]` 표시됨)
+
+| 변수 | 배포 시 설정 |
+|------|--------------|
+| `DEBUG` | `False` |
+| `CORS_ORIGINS` | 실제 프론트엔드 URL(쉼표 구분) |
+| `BE_API_URL` | 실제 API 서버 URL (이미지·파일 링크에 사용) |
+| `STORAGE_BACKEND` | `s3` 권장 (로컬은 `local`) |
+| `S3_BUCKET_NAME`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` 등 | S3 사용 시 실제 값 입력 |
 
 ### 4. 서버 실행
 
@@ -160,7 +178,7 @@ HTTP 응답  { "code": "POST_UPLOADED", "data": { "postId": 1 } }
 │   │   ├── database.py            # MySQL 연결 (get_connection, init_database)
 │   │   ├── dependencies.py        # 인증·권한 의존성 (get_current_user, require_post_author 등)
 │   │   ├── exception_handlers.py  # 예외 처리 (RequestValidationError, HTTPException → {code, data} 변환)
-│   │   ├── file_upload.py         # 프로필/게시글 이미지 검증·저장·URL 생성
+│   │   ├── file_upload.py         # 프로필/게시글 이미지·비디오 검증·저장·URL 생성
 │   │   ├── response.py            # success_response, raise_http_error
 │   │   └── validators.py          # 비밀번호/닉네임/URL 형식 검증 (DTO에서 사용)
 │   │
@@ -177,8 +195,8 @@ HTTP 응답  { "code": "POST_UPLOADED", "data": { "postId": 1 } }
 │   │   └── users_schema.py        # UpdateUserRequest, UpdatePasswordRequest, CheckUserExistsQuery
 │   │
 │   ├── posts/                     # 게시글
-│   │   ├── posts_route.py         # GET/POST /posts, GET/PATCH/DELETE /posts/{id}, POST /posts/{id}/image
-│   │   ├── posts_controller.py    # create_post, get_posts, get_post, update_post, delete_post, upload_post_image
+│   │   ├── posts_route.py         # GET/POST /posts, GET/PATCH/DELETE /posts/{id}, POST /posts/{id}/image, /posts/{id}/video
+│   │   ├── posts_controller.py    # create_post, get_posts, get_post, update_post, delete_post, upload_post_image, upload_post_video
 │   │   ├── posts_model.py         # posts, post_files 테이블 접근
 │   │   └── posts_schema.py        # PostCreateRequest, PostUpdateRequest
 │   │
@@ -199,8 +217,15 @@ HTTP 응답  { "code": "POST_UPLOADED", "data": { "postId": 1 } }
 │   └── puppyytalkdb.sql           # DB 테이블 생성 스크립트
 │
 ├── main.py                        # 앱 진입점, lifespan, 미들웨어(CORS, 보안헤더), 라우터 등록
+├── upload/                         # STORAGE_BACKEND=local 시 업로드 파일 저장 (실행 시 생성, git 제외)
+│   ├── image/
+│   │   ├── profile/                # 프로필 사진
+│   │   └── post/                   # 게시글 이미지
+│   └── video/
+│       └── post/                   # 게시글 비디오
 ├── pyproject.toml                 # 의존성 패키지 목록
-├── .env                           # 환경 변수 (직접 생성)
+├── .env.example                   # 환경 변수 견본 (복사 → .env 로 저장 후 값 채우기)
+├── .env                           # 환경 변수 (직접 생성, git 제외, 앱이 읽는 파일)
 └── README.md
 ```
 
@@ -219,8 +244,16 @@ HTTP 응답  { "code": "POST_UPLOADED", "data": { "postId": 1 } }
 
 ### 환경 변수 (.env)
 
-`js/constants.js`와 달리 `.env`는 git에 올리지 않고 로컬에서 직접 생성합니다.  
-필수 항목: DB 연결 정보, `CORS_ORIGINS`(프론트 주소).
+**앱은 `.env`만 로드합니다.** 저장소에는 `.env.example`(견본)만 올라가고, `.env`는 git에 올리지 않습니다. `.env.example`을 복사해 `.env`로 저장한 뒤 값을 채워 사용합니다. 배포 시에는 서버 또는 플랫폼 환경 변수에 같은 키로 설정하면 됩니다.
+
+필수: DB 연결 정보, `CORS_ORIGINS`(프론트 주소).
+
+### 배포 시 파일 저장 (S3)
+
+기본값(`STORAGE_BACKEND=local`)은 프로젝트 내 `upload/image/`에 저장됩니다. 배포 시 서버 재시작·스케일 아웃 시 파일이 사라지거나 인스턴스마다 달라질 수 있으므로 **S3 사용을 권장**합니다.
+
+- `.env`에 `STORAGE_BACKEND=s3` 설정 후 `S3_BUCKET_NAME`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`를 입력합니다.
+- S3 버킷에서 해당 객체를 공개 읽기 허용(버킷 정책 또는 객체 ACL)하거나, CloudFront를 사용하면 `S3_PUBLIC_BASE_URL`에 CloudFront URL을 넣으면 됩니다.
 
 ### 프론트엔드 연동 (크로스 오리진)
 

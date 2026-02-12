@@ -25,6 +25,9 @@ venv.bak/
 .env.test
 .env.production
 
+# 업로드된 이미지 제외, 폴더 구조(.gitkeep)만 커밋
+upload
+
 # IDE / Editors
 # PyCharm / IntelliJ IDEA
 .idea/

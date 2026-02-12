@@ -20,7 +20,6 @@ venv.bak/
 # Environment variables
 # 환경 변수 파일 (민감한 정보 포함)
 .env
-.env.dev
 .env.local
 .env.*.local
 .env.test

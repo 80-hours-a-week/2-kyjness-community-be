@@ -16,6 +16,7 @@ dependencies = [
     "pymysql>=1.1.0",
     "python-multipart>=0.0.6",  # File(), Form() 사용 시 필수 (multipart/form-data 파싱)
     "boto3>=1.28.0",  # S3 업로드 (STORAGE_BACKEND=s3 시)
+    "gunicorn>=21.0.0",  # 프로덕션 서버 (uvicorn worker 사용)
 ]
 
 [project.optional-dependencies]
@@ -31,9 +32,3 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["app"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]

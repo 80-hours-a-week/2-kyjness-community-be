@@ -10,7 +10,8 @@ from fastapi import UploadFile
 from app.core.config import settings
 from app.core.response import raise_http_error
 
-PROFILE_ALLOWED_TYPES = ["image/jpeg", "image/jpg"]
+# 프로필·게시글 이미지 모두 config와 동일 (jpeg/jpg/png)
+PROFILE_ALLOWED_TYPES = settings.ALLOWED_IMAGE_TYPES
 POST_ALLOWED_TYPES = settings.ALLOWED_IMAGE_TYPES
 POST_VIDEO_ALLOWED_TYPES = settings.ALLOWED_VIDEO_TYPES
 MAX_FILE_SIZE = settings.MAX_FILE_SIZE
@@ -52,7 +53,7 @@ async def _validate_image(
     allowed_types: List[str],
     max_size: int = MAX_FILE_SIZE,
 ) -> bytes:
-    """이미지 검증: 존재·Content-Type·크기·확장자. bytes 반환."""
+    """이미지 검증: 존재·Content-Type·크기만. 확장자는 제한하지 않음."""
     if not file:
         raise_http_error(400, "MISSING_REQUIRED_FIELD")
 
@@ -65,11 +66,6 @@ async def _validate_image(
 
     if len(content) > max_size:
         raise_http_error(400, "FILE_SIZE_EXCEEDED")
-
-    if file.filename:
-        ext = file.filename.lower().split(".")[-1] if "." in file.filename else ""
-        if ext not in ["jpg", "jpeg", "png"]:
-            raise_http_error(400, "INVALID_FILE_TYPE")
 
     return content
 
@@ -86,9 +82,20 @@ async def validate_image_upload(
     return await _validate_image(file, allowed_types, max_size)
 
 
+def _safe_extension(filename: Optional[str], content_type: str) -> str:
+    """파일명에서 확장자 추출. 없거나 비정상이면 content_type 기준으로 반환."""
+    if filename and "." in filename:
+        ext = filename.lower().split(".")[-1].strip()
+        if ext and len(ext) <= 5 and ext.isalnum():
+            return ext
+    if "png" in content_type:
+        return "png"
+    return "jpg"
+
+
 async def save_profile_image(file: Optional[UploadFile]) -> str:
     """
-    프로필 이미지: 검증 + 저장 + URL 반환.
+    프로필 이미지: 검증(Content-Type·크기만) + 저장 + URL 반환. 확장자 제한 없음.
     STORAGE_BACKEND=local → upload/image/profile, s3 → S3 버킷 image/profile/
     """
     content = await _validate_image(
@@ -97,10 +104,12 @@ async def save_profile_image(file: Optional[UploadFile]) -> str:
         max_size=MAX_FILE_SIZE,
     )
 
-    filename = f"{uuid.uuid4().hex}.jpg"
+    ext = _safe_extension(file.filename if file else None, file.content_type or "")
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    ct = file.content_type or "image/jpeg"
     if settings.STORAGE_BACKEND == "s3":
         key = f"image/profile/{filename}"
-        return _s3_upload(key, content, "image/jpeg")
+        return _s3_upload(key, content, ct)
     UPLOAD_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
     filepath = UPLOAD_PROFILE_DIR / filename
     filepath.write_bytes(content)
@@ -109,8 +118,7 @@ async def save_profile_image(file: Optional[UploadFile]) -> str:
 
 async def save_post_image(post_id: int, file: Optional[UploadFile]) -> str:
     """
-    게시글 이미지: 검증 + 저장 + URL 반환.
-    STORAGE_BACKEND=local → upload/image/post, s3 → S3 버킷 image/post/
+    게시글 이미지: 검증(Content-Type·크기만) + 저장 + URL 반환. 확장자 제한 없음.
     """
     content = await _validate_image(
         file,
@@ -118,17 +126,13 @@ async def save_post_image(post_id: int, file: Optional[UploadFile]) -> str:
         max_size=MAX_FILE_SIZE,
     )
 
-    ext = "jpg"
-    if file.filename and "." in file.filename:
-        ext = file.filename.lower().split(".")[-1]
-        if ext not in ("jpg", "jpeg", "png"):
-            ext = "jpg"
+    ext = _safe_extension(file.filename if file else None, file.content_type or "")
     filename = f"{post_id}_{uuid.uuid4().hex}.{ext}"
-    content_type = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
+    ct = file.content_type if file else "image/jpeg"
 
     if settings.STORAGE_BACKEND == "s3":
         key = f"image/post/{filename}"
-        return _s3_upload(key, content, content_type)
+        return _s3_upload(key, content, ct)
     UPLOAD_POST_DIR.mkdir(parents=True, exist_ok=True)
     filepath = UPLOAD_POST_DIR / filename
     filepath.write_bytes(content)

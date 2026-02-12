@@ -18,6 +18,7 @@ from app.comments.comments_route import router as comments_router
 from app.likes.likes_route import router as likes_router
 from app.core.config import settings
 from app.core.exception_handlers import register_exception_handlers
+from app.core.rate_limit import rate_limit_middleware
 
 # 로깅 설정: 레벨·포맷·파일(선택)
 _LOG_FMT = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
@@ -95,7 +96,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# 미들웨어 (아래서부터 실행: access_log → CORS → security_headers)
+# 미들웨어 (아래서부터 실행: rate_limit → access_log → CORS → security_headers)
+app.middleware("http")(rate_limit_middleware)
 app.middleware("http")(access_log_middleware)
 app.middleware("http")(add_security_headers)
 

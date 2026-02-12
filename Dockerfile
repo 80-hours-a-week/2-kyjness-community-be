@@ -25,4 +25,5 @@ RUN mkdir -p /app/upload
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 프로덕션: Gunicorn + Uvicorn worker (워커 수·바인딩은 환경에 맞게 조정)
+CMD ["gunicorn", "main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000"]

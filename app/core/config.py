@@ -27,8 +27,10 @@ class Settings:
     
     # 세션 설정
     SESSION_EXPIRY_TIME: int = int(os.getenv("SESSION_EXPIRY_TIME", "86400"))  # 24시간
+    # Set-Cookie secure: True면 HTTPS에서만 쿠키 전송. 배포(HTTPS) 시 True 권장
+    COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
-    # Rate limiting (추후 미들웨어 등에서 사용 시 참조)
+    # Rate limiting (IP당 RATE_LIMIT_WINDOW 초 동안 RATE_LIMIT_MAX_REQUESTS 초과 시 429)
     RATE_LIMIT_WINDOW: int = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
     RATE_LIMIT_MAX_REQUESTS: int = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "100"))
 

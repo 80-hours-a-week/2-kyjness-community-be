@@ -306,9 +306,3 @@ class AuthModel:
                 count = cur.rowcount
             conn.commit()
         return count
-
-    # 하위 호환 별칭
-    create_token = create_session
-    verify_token = get_user_id_by_session
-    revoke_token = revoke_session
-    revoke_all_user_tokens = revoke_all_sessions_for_user

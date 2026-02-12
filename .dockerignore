@@ -17,8 +17,7 @@ __pycache__
 venv
 env
 
-# 테스트/문서 (이미지 크기 절감)
-tests
+# 문서 (이미지 크기 절감)
 docs
 *.md
 !README.md

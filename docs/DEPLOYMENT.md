@@ -21,6 +21,7 @@
 - [ ] S3 버킷 생성 (이미지 저장 시)
 - [ ] CORS에 배포된 프론트 URL 포함
 - [ ] `DEBUG=False` 설정
+- [ ] `COOKIE_SECURE=true` 설정 (HTTPS 배포 시)
 - [ ] `STORAGE_BACKEND=s3` 설정 (권장)
 
 ---
@@ -86,17 +87,28 @@ mysql -h YOUR_DB_HOST -u YOUR_USER -p puppytalk < docs/puppyytalkdb.sql
 
 ## 6. 서버 실행
 
+- **Uvicorn**: ASGI 서버. 로컬에서는 uvicorn 단독으로 실행하고, 프로덕션에서는 Gunicorn이 **Uvicorn worker**를 사용하므로 둘 다 필요합니다.
+- **로컬/개발**: uvicorn 단독 (단일 프로세스, `--reload` 가능).
+- **프로덕션/Docker**: Gunicorn + Uvicorn worker (멀티 워커).
+
 ```bash
 # 가상환경 활성화 후
 pip install .
+
+# 로컬/개발 (Uvicorn 단독, --reload 로 코드 변경 시 자동 재시작)
 uvicorn main:app --host 0.0.0.0 --port 8000
+
+# 프로덕션 (Gunicorn + Uvicorn worker)
+gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
 ```
 
-프로덕션에서는 `--reload` 제거하고, gunicorn + uvicorn worker 또는 플랫폼 기본 설정 사용.
+- `-w 4`: 워커 수 (CPU 코어에 맞게 조정). Rate limiting은 워커별 메모리이므로 워커 수만큼 허용량이 늘어날 수 있음.
 
 ---
 
 ## 7. Docker로 실행 (추후 배포용)
+
+이미지 내부에서는 **Gunicorn + Uvicorn worker**로 실행됩니다. (Uvicorn이 ASGI 앱을 실행하는 워커로 동작)
 
 ```bash
 # 이미지 빌드
@@ -117,18 +129,25 @@ docker run -p 8000:8000 --env-file .env puppytalk-api
 
 - 환경 변수를 플랫폼 대시보드에서 설정
 - DB는 내장 MySQL 또는 외부 RDS/Cloud SQL 사용
-- 빌드 커맨드: `pip install .`  
-- 실행 커맨드: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+- 빌드 커맨드: `pip install .`
+- 실행 커맨드: `gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:$PORT` (또는 플랫폼이 PORT를 주입하면 `-b 0.0.0.0:8000` 등으로 고정)
 
 ### AWS (EC2, ECS 등)
 
-- EC2: `.env` 파일 생성 후 `systemd` 또는 `supervisor`로 uvicorn 실행
+- EC2: `.env` 파일 생성 후 `systemd` 또는 `supervisor`로 **uvicorn**(로컬형) 또는 **gunicorn + uvicorn worker**(프로덕션) 실행
 - ECS: Task Definition의 환경 변수에 설정
 - RDS로 MySQL, S3로 이미지 저장
 
 ---
 
-## 9. 문제 해결
+## 9. Rate limiting
+
+- IP당 `RATE_LIMIT_WINDOW`(초) 동안 `RATE_LIMIT_MAX_REQUESTS` 회 초과 시 **429** `{ "code": "RATE_LIMIT_EXCEEDED", "data": null }` 반환.
+- `.env`의 `RATE_LIMIT_WINDOW`, `RATE_LIMIT_MAX_REQUESTS`로 조정 가능. Gunicorn 멀티 워커 시 제한은 워커별 메모리 기준이라 허용량이 워커 수만큼 늘어날 수 있음.
+
+---
+
+## 10. 문제 해결
 
 | 현상 | 확인 사항 |
 |------|-----------|

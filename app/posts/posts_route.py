@@ -56,7 +56,7 @@ async def upload_post_video(
 @router.get("", status_code=200)
 async def get_posts(
     page: int = Query(1, ge=1, description="페이지 번호"),
-    size: int = Query(10, ge=1, description="페이지 크기 (기본값: 10)")
+    size: int = Query(10, ge=1, le=100, description="페이지 크기 (기본 10, 최대 100)")
 ):
     """게시글 목록 조회 API"""
     return posts_controller.get_posts(page=page, size=size)

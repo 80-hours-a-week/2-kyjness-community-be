@@ -5,7 +5,9 @@
 
 ---
 
-## 기능
+## 개요
+
+### 기능
 
 | 기능 | 설명 |
 |------|------|
@@ -16,7 +18,7 @@
 
 ---
 
-## 기술 스택
+### 기술 스택
 
 | 구분 | 기술 |
 |------|------|
@@ -27,6 +29,80 @@
 | **암호화** | bcrypt (비밀번호) |
 
 ---
+
+### 세션 저장소
+
+- **저장소**: MySQL `sessions` 테이블 (Redis 아님). `docs/puppyytalkdb.sql` 참고.
+- **로그인 시**: 세션 ID 생성 → DB에 저장 → 쿠키로 브라우저에 전달
+- **이후 요청 시**: 브라우저가 쿠키 자동 전송 → 서버가 세션 ID로 사용자 식별
+- **로그아웃·만료 시**: 세션 삭제
+
+### 설계 배경
+
+| 선택 | 이유 |
+|------|------|
+| **무한 스크롤 vs 페이지네이션** | 게시글 목록은 피드 형태로 스크롤하며 읽는 UX가 자연스럽고, "다음 페이지" 클릭 없이 계속 로드 가능. 커뮤니티 피드는 새 글 보는 흐름이 중요해 무한 스크롤(hasMore) 선택. 댓글은 "몇 페이지인지", "총 몇 개인지"가 중요해 페이지 번호(totalCount, totalPages) 선택. 특정 댓글 찾기·목록 전체 파악이 용이함. |
+| **세션 저장소: MySQL** | Redis 없이도 단일 DB로 세션·유저·게시글 일괄 관리 가능. 소규모 서비스에서 운영 부담을 줄이기 위해 MySQL `sessions` 테이블 사용. 규모 확장 시 Redis로 이전 가능. |
+| **쿠키-세션 방식** | JWT는 클라이언트 저장·전송 시 XSS·CSRF 관리 부담. 쿠키(HttpOnly, SameSite)로 세션 ID만 전달하면 브라우저가 자동 전송하고, 서버에서 세션 검증으로 보안 부담을 줄임. |
+| **로그인 전용 rate limit** | 전역 rate limit만으로는 로그인 브루트포스에 충분하지 않음. 로그인 API에 IP당 분당 5회 제한을 별도 적용해 시도 횟수를 제한. |
+
+---
+
+## API 문서
+
+서버 실행 후 브라우저에서 아래 주소로 API 문서를 볼 수 있습니다.
+
+| 문서 | 주소 (로컬 실행 시) |
+|------|---------------------|
+| Swagger UI | http://localhost:8000/docs |
+| ReDoc | http://localhost:8000/redoc |
+
+도메인별 API 구성은 다음과 같습니다.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  auth  │  /auth/...                                                     │
+├────────┼────────────────────────────────────────────────────────────────┤
+│  POST  │  /upload-signup-profile-image   회원가입용 프로필 이미지 업로드  │
+│  POST  │  /signup                         회원가입                        │
+│  POST  │  /login                          로그인 (세션 쿠키 설정)         │
+│  POST  │  /logout                         로그아웃                        │
+│  GET   │  /me                             로그인 상태 조회                │
+└────────┴────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  users │  /users/...                                                     │
+├────────┼────────────────────────────────────────────────────────────────┤
+│  GET   │  ?email=... | ?nickname=...      이메일/닉네임 중복 체크          │
+│  GET   │  /me                             내 프로필 조회                  │
+│  PATCH │  /me                             내 정보 수정                    │
+│  PATCH │  /me/password                    비밀번호 변경                  │
+│  POST  │  /me/profile-image               프로필 사진 업로드              │
+│  DELETE│  /me                             회원 탈퇴                       │
+└────────┴────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  posts │  /posts/...                                                     │
+├────────┼────────────────────────────────────────────────────────────────┤
+│  POST  │  /                               게시글 작성                     │
+│  POST  │  /{post_id}/image                게시글 이미지 업로드 (최대 5장)   │
+│  GET   │  /                               게시글 목록 (무한 스크롤)        │
+│  GET   │  /{post_id}                      게시글 상세                     │
+│  PATCH │  /{post_id}                      게시글 수정                     │
+│  DELETE│  /{post_id}                      게시글 삭제                     │
+│  POST  │  /{post_id}/likes                좋아요 추가                     │
+│  DELETE│  /{post_id}/likes                좋아요 취소                     │
+└────────┴────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│comments│  /posts/{post_id}/comments/...                                  │
+├────────┼────────────────────────────────────────────────────────────────┤
+│  POST  │  /                               댓글 작성                      │
+│  GET   │  /                               댓글 목록 (페이징)              │
+│  PATCH │  /{comment_id}                   댓글 수정                      │
+│  DELETE│  /{comment_id}                   댓글 삭제                      │
+└────────┴────────────────────────────────────────────────────────────────┘
+```
 
 ## 폴더 구조
 
@@ -81,65 +157,8 @@
 └── README.md
 ```
 
----
 
-## 실행 방법
-
-### 1. 사전 준비
-
-- **Python 3.8 이상** 설치
-- **MySQL** 설치·실행 후 `puppytalk` DB 생성 및 테이블 생성
-
-```bash
-mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS puppytalk;"
-mysql -u root -p puppytalk < docs/puppyytalkdb.sql
-```
-
-테이블 관계는 `docs/erd.png`를, DDL은 `docs/puppyytalkdb.sql`을 참고합니다.
-
-### 2. 가상환경 및 패키지
-
-```bash
-cd 2-kyjness-community-be
-python -m venv venv
-
-# 활성화
-# Windows CMD:        venv\Scripts\activate
-# Windows PowerShell: .\venv\Scripts\Activate.ps1
-# Git Bash:           source venv/Scripts/activate
-
-pip install .
-```
-
-테스트까지 포함: `pip install ".[dev]"`
-
-### 3. 환경 변수
-
-앱은 루트의 **`.env`** 하나만 읽습니다. **`.env.example`**을 복사해 `.env`로 저장한 뒤 값을 채우면 됩니다. 각 변수 설명은 `.env.example` 주석을 참고하면 됩니다.
-
-### 4. 서버 실행
-
-```bash
-# 로컬/개발 (Uvicorn 단독, --reload 시 코드 변경 반영)
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-프로덕션/Docker에서는 Gunicorn + Uvicorn worker 사용을 권장합니다.
-
-로컬에서 서버를 실행한 뒤 브라우저에서 다음 주소로 API 문서를 확인할 수 있습니다.
-
-| 문서 | 주소 (로컬 실행 시) |
-|------|---------------------|
-| Swagger UI | http://localhost:8000/docs |
-| ReDoc | http://localhost:8000/redoc |
-
-> GitHub에서 README를 볼 때는 위 링크에 접속할 수 없습니다. 프로젝트를 클론한 뒤 서버를 실행해야 접근 가능합니다.
-
----
-
-## 아키텍처
-
-### 1. 전체 흐름
+## 전체 흐름
 
 ```
 [프론트엔드 / 클라이언트]  HTTP 요청 (JSON body, Cookie)
@@ -186,49 +205,50 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 HTTP 응답  { "code": "POST_UPLOADED", "data": { "postId": 1 } }
 ```
 
-### 2. 세션 저장소
-
-- **저장소**: MySQL `sessions` 테이블 (Redis 아님). `docs/puppyytalkdb.sql` 참고.
-- **로그인 시**: 세션 ID 생성 → DB에 저장 → 쿠키로 브라우저에 전달
-- **이후 요청 시**: 브라우저가 쿠키 자동 전송 → 서버가 세션 ID로 사용자 식별
-- **로그아웃·만료 시**: 세션 삭제
-
-### 3. 설계 배경
-
-| 선택 | 이유 |
-|------|------|
-| **무한 스크롤 vs 페이지네이션** | 게시글 목록은 피드 형태로 스크롤하며 읽는 UX가 자연스럽고, "다음 페이지" 클릭 없이 계속 로드 가능. 커뮤니티 피드는 새 글 보는 흐름이 중요해 무한 스크롤(hasMore) 선택. 댓글은 "몇 페이지인지", "총 몇 개인지"가 중요해 페이지 번호(totalCount, totalPages) 선택. 특정 댓글 찾기·목록 전체 파악이 용이함. |
-| **세션 저장소: MySQL** | Redis 없이도 단일 DB로 세션·유저·게시글 일괄 관리 가능. 소규모 서비스에서 운영 부담을 줄이기 위해 MySQL `sessions` 테이블 사용. 규모 확장 시 Redis로 이전 가능. |
-| **쿠키-세션 방식** | JWT는 클라이언트 저장·전송 시 XSS·CSRF 관리 부담. 쿠키(HttpOnly, SameSite)로 세션 ID만 전달하면 브라우저가 자동 전송하고, 서버에서 세션 검증으로 보안 부담을 줄임. |
-| **로그인 전용 rate limit** | 전역 rate limit만으로는 로그인 브루트포스에 충분하지 않음. 로그인 API에 IP당 분당 5회 제한을 별도 적용해 시도 횟수를 제한. |
-
-
 ---
 
-## 설정
+## 실행 방법
 
-환경 변수(`.env`), S3·파일 저장, CORS·프론트 연동 등 상세는 **`.env.example`** 주석을 참고하면 됩니다.
+### 1. 사전 준비
 
----
+- **Python 3.8 이상** 설치
+- **MySQL** 설치·실행 후 `puppytalk` DB 생성 및 테이블 생성
 
-## 체크리스트
+```bash
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS puppytalk;"
+mysql -u root -p puppytalk < docs/puppyytalkdb.sql
+```
 
-### 로컬 실행 시
+테이블 관계는 `docs/erd.png`를, DDL은 `docs/puppyytalkdb.sql`을 참고합니다.
 
-- [ ] Python 3.8+, MySQL 설치·실행
-- [ ] `puppytalk` DB 생성 및 `docs/puppyytalkdb.sql` 적용
-- [ ] `.env.example`을 복사해 `.env` 생성 후 DB·CORS 등 값 채우기
-- [ ] `pip install .` 후 `uvicorn main:app --reload --host 0.0.0.0 --port 8000`
+### 2. 가상환경 및 패키지
 
-### 배포 전
+```bash
+cd 2-kyjness-community-be
+python -m venv venv
 
-- [ ] `DEBUG=False`
-- [ ] `CORS_ORIGINS`에 실제 프론트 URL만 명시
-- [ ] `COOKIE_SECURE=true` (HTTPS 환경)
-- [ ] `BE_API_URL`에 실제 API 주소
-- [ ] DB 비밀번호·S3 키 등 .env에만 두고 저장소에 미포함
-- [ ] (선택) `LOG_FILE_PATH` 설정 시 디스크 용량·로테이션 확인
+# 활성화
+# Windows CMD:        venv\Scripts\activate
+# Windows PowerShell: .\venv\Scripts\Activate.ps1
+# Git Bash:           source venv/Scripts/activate
 
+pip install .
+```
+
+테스트까지 포함: `pip install ".[dev]"`
+
+### 3. 환경 변수
+
+앱은 루트의 **`.env`** 하나만 읽습니다. **`.env.example`**을 복사해 `.env`로 저장한 뒤 값을 채우면 됩니다. 환경 변수(포트, DB, CORS, S3·파일 저장 등) 상세는 **`.env.example`** 주석을 참고하면 됩니다.
+
+### 4. 서버 실행
+
+```bash
+# 로컬/개발 (Uvicorn 단독, --reload 시 코드 변경 반영)
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+프로덕션/Docker에서는 Gunicorn + Uvicorn worker 사용을 권장합니다.
 
 ---
 

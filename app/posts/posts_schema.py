@@ -1,6 +1,6 @@
 # app/posts/posts_schema.py
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional
+from typing import List, Optional
 
 from app.core.validators import ensure_file_url
 
@@ -42,7 +42,7 @@ class AuthorInfo(BaseModel):
     nickname: str
     profileImageUrl: str
 
-# 파일 이미지 정보
+# 파일 이미지 정보 (최대 5장)
 class FileInfo(BaseModel):
     fileId: int
     fileUrl: str
@@ -56,7 +56,7 @@ class PostResponse(BaseModel):
     likeCount: int
     commentCount: int
     author: AuthorInfo
-    file: Optional[FileInfo]
+    files: List[FileInfo] = Field(default_factory=list, description="이미지 목록 (최대 5장)")
     createdAt: str
 
 # 게시글 상세조회 성공 응답
@@ -68,5 +68,5 @@ class PostDetailResponse(BaseModel):
     likeCount: int
     commentCount: int
     author: AuthorInfo
-    file: Optional[FileInfo]
+    files: List[FileInfo] = Field(default_factory=list, description="이미지 목록 (최대 5장)")
     createdAt: str

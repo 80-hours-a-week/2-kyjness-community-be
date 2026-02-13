@@ -33,19 +33,16 @@ class Settings:
     # Rate limiting (IP당 RATE_LIMIT_WINDOW 초 동안 RATE_LIMIT_MAX_REQUESTS 초과 시 429)
     RATE_LIMIT_WINDOW: int = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
     RATE_LIMIT_MAX_REQUESTS: int = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "100"))
+    # 로그인 전용 (브루트포스 방지): IP당 분당 시도 횟수 제한
+    LOGIN_RATE_LIMIT_WINDOW: int = int(os.getenv("LOGIN_RATE_LIMIT_WINDOW", "60"))
+    LOGIN_RATE_LIMIT_MAX_ATTEMPTS: int = int(os.getenv("LOGIN_RATE_LIMIT_MAX_ATTEMPTS", "5"))
 
     # 파일 업로드 설정
     MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB
-    MAX_VIDEO_SIZE: int = int(os.getenv("MAX_VIDEO_SIZE", "52428800"))  # 50MB
     ALLOWED_IMAGE_TYPES: List[str] = [
         img_type.strip()
         for img_type in os.getenv("ALLOWED_IMAGE_TYPES", "image/jpeg,image/jpg,image/png").split(",")
         if img_type.strip()
-    ]
-    ALLOWED_VIDEO_TYPES: List[str] = [
-        v.strip()
-        for v in os.getenv("ALLOWED_VIDEO_TYPES", "video/mp4,video/webm").split(",")
-        if v.strip()
     ]
     
     # API 기본 URL (파일 업로드 URL 생성용, local 저장 시 사용)

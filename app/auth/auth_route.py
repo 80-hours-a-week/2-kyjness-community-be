@@ -1,11 +1,12 @@
 # app/auth/auth_route.py
-from fastapi import APIRouter, Response, Cookie, Depends, UploadFile, File
+from fastapi import APIRouter, Request, Response, Cookie, Depends, UploadFile, File
 from typing import Optional
 from app.auth.auth_schema import SignUpRequest, LoginRequest
 from app.auth import auth_controller
 from app.core.config import settings
 from app.core.dependencies import get_current_user
 from app.core.file_upload import save_profile_image
+from app.core.rate_limit import check_login_rate_limit
 from app.core.response import success_response
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -32,10 +33,15 @@ async def signup(signup_data: SignUpRequest):
         profile_image_url=signup_data.profileImageUrl
     )
 
-# 로그인 (쿠키-세션 방식, JWT 아님 — 인증 정보는 Set-Cookie로만 전달)
+# 로그인 (쿠키-세션 방식, JWT 아님 — 인증 정보는 Set-Cookie로만 전달. 로그인 전용 rate limit 적용)
 @router.post("/login", status_code=200)
-async def login(login_data: LoginRequest, response: Response):
-    """로그인 API — 세션 생성 후 세션 ID만 Set-Cookie로 내려줌. body에는 토큰 없음."""
+async def login(
+    request: Request,
+    login_data: LoginRequest,
+    response: Response,
+    _: None = Depends(check_login_rate_limit),
+):
+    """로그인 API — 세션 생성 후 세션 ID만 Set-Cookie로 내려줌. body에는 토큰 없음. IP당 분당 5회 제한."""
     result, session_id = auth_controller.login(
         email=login_data.email,
         password=login_data.password
@@ -58,9 +64,9 @@ async def logout(response: Response, session_id: Optional[str] = Cookie(None)):
     result = auth_controller.logout(session_id)
     response.delete_cookie(key="session_id")
     return result
-
 # 로그인 상태 체크 (쿠키-세션 방식)
 @router.get("/me", status_code=200)
 async def get_me(user_id: int = Depends(get_current_user)):
     """로그인 상태 체크 API (쿠키-세션 방식)"""
     return auth_controller.get_me(user_id)
+

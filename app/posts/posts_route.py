@@ -37,21 +37,6 @@ async def upload_post_image(
         file=postFile
     )
 
-# 게시글 비디오 업로드
-@router.post("/{post_id}/video", status_code=201)
-async def upload_post_video(
-    post_id: int = Path(..., description="게시글 ID"),
-    postFile: Optional[UploadFile] = File(None, description="게시글 비디오 파일 (mp4, webm)"),
-    user_id: int = Depends(get_current_user),
-    _: int = Depends(require_post_author),
-):
-    """게시글 비디오 업로드 API"""
-    return await posts_controller.upload_post_video(
-        post_id=post_id,
-        user_id=user_id,
-        file=postFile
-    )
-
 # 게시글 목록 조회
 @router.get("", status_code=200)
 async def get_posts(
@@ -94,3 +79,23 @@ async def delete_post(
     """게시글 삭제 API"""
     posts_controller.delete_post(post_id=post_id, user_id=user_id)
     return Response(status_code=204)
+
+
+# 좋아요 추가
+@router.post("/{post_id}/likes", status_code=201)
+async def create_like(
+    post_id: int = Path(..., description="게시글 ID"),
+    user_id: int = Depends(get_current_user),
+):
+    """게시글 좋아요 추가 API"""
+    return posts_controller.create_like(post_id=post_id, user_id=user_id)
+
+
+# 좋아요 취소
+@router.delete("/{post_id}/likes", status_code=200)
+async def delete_like(
+    post_id: int = Path(..., description="게시글 ID"),
+    user_id: int = Depends(get_current_user),
+):
+    """게시글 좋아요 취소 API. 응답에 likeCount 포함."""
+    return posts_controller.delete_like(post_id=post_id, user_id=user_id)

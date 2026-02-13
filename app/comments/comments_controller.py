@@ -17,10 +17,14 @@ def create_comment(post_id: int, user_id: int, content: str):
 
 
 def get_comments(post_id: int, page: int = 1, size: int = 20):
+    """댓글 목록 조회 (20개 단위 페이지네이션). totalCount, totalPages, currentPage 반환."""
     post = PostsModel.find_post_by_id(post_id)
     if not post:
         raise_http_error(404, "POST_NOT_FOUND")
     comments = CommentsModel.get_comments_by_post_id(post_id, page, size)
+    total_count = CommentsModel.get_comment_count_by_post_id(post_id)
+    total_pages = max(1, (total_count + size - 1) // size) if total_count > 0 else 1
+
     result = []
     for comment in comments:
         author = AuthModel.find_user_by_id(comment["authorId"])
@@ -38,7 +42,13 @@ def get_comments(post_id: int, page: int = 1, size: int = 20):
                     "createdAt": comment["createdAt"],
                 }
             )
-    return success_response("COMMENTS_RETRIEVED", result)
+    return {
+        "code": "COMMENTS_RETRIEVED",
+        "data": result,
+        "totalCount": total_count,
+        "totalPages": total_pages,
+        "currentPage": page,
+    }
 
 
 def update_comment(post_id: int, comment_id: int, user_id: int, content: str):

@@ -49,7 +49,6 @@ def logout(session_id: Optional[str]):
     AuthModel.revoke_session(session_id)
     return success_response("LOGOUT_SUCCESS")
 
-
 def get_me(user_id: int):
     user = AuthModel.find_user_by_id(user_id)
     if not user:
@@ -60,3 +59,4 @@ def get_me(user_id: int):
         "nickname": user["nickname"],
         "profileImageUrl": user["profileImageUrl"],
     })
+

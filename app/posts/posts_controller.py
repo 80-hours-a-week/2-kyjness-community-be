@@ -5,10 +5,10 @@ from typing import Optional
 
 from fastapi import UploadFile
 
-from app.posts.posts_model import PostsModel
+from app.posts.posts_model import PostsModel, PostLikesModel
 from app.auth.auth_model import AuthModel
 from app.core.response import success_response, raise_http_error
-from app.core.file_upload import save_post_image, save_post_video
+from app.core.file_upload import save_post_image
 
 
 def create_post(user_id: int, title: str, content: str, file_url: str = ""):
@@ -18,29 +18,22 @@ def create_post(user_id: int, title: str, content: str, file_url: str = ""):
 
 
 async def upload_post_image(post_id: int, user_id: int, file: Optional[UploadFile]):
-    """게시글 이미지 업로드. 검증·저장·URL은 file_upload.save_post_image에서 처리."""
+    """게시글 이미지 업로드. 최대 5장. 검증·저장·URL은 file_upload.save_post_image에서 처리."""
     post = PostsModel.find_post_by_id(post_id)
     if not post:
         raise_http_error(404, "POST_NOT_FOUND")
+    if len(post.get("files", [])) >= PostsModel.MAX_POST_FILES:
+        raise_http_error(400, "POST_FILE_LIMIT_EXCEEDED")
     file_url = await save_post_image(post_id, file)
     PostsModel.update_post(post_id, title=None, content=None, file_url=file_url)
     return success_response("POST_IMAGE_UPLOADED", {"postFileUrl": file_url})
 
 
-async def upload_post_video(post_id: int, user_id: int, file: Optional[UploadFile]):
-    """게시글 비디오 업로드. 검증·저장·URL은 file_upload.save_post_video에서 처리."""
-    post = PostsModel.find_post_by_id(post_id)
-    if not post:
-        raise_http_error(404, "POST_NOT_FOUND")
-    file_url = await save_post_video(post_id, file)
-    PostsModel.update_post(post_id, title=None, content=None, file_url=file_url)
-    return success_response("POST_VIDEO_UPLOADED", {"postFileUrl": file_url})
-
-
 def get_posts(page: int = 1, size: int = 10):
-    posts = PostsModel.get_all_posts(page, size)
+    """무한 스크롤용 게시글 목록. data, hasMore 반환."""
+    posts_raw, has_more = PostsModel.get_all_posts(page, size)
     result = []
-    for post in posts:
+    for post in posts_raw:
         author = AuthModel.find_user_by_id(post["authorId"])
         if author:
             result.append(
@@ -56,11 +49,11 @@ def get_posts(page: int = 1, size: int = 10):
                         "nickname": author["nickname"],
                         "profileImageUrl": author.get("profileImageUrl", ""),
                     },
-                    "file": post.get("file"),
+                    "files": post.get("files", []),
                     "createdAt": post["createdAt"],
                 }
             )
-    return success_response("POSTS_RETRIEVED", result)
+    return {"code": "POSTS_RETRIEVED", "data": result, "hasMore": has_more}
 
 
 def get_post(post_id: int):
@@ -83,7 +76,7 @@ def get_post(post_id: int):
             "nickname": author["nickname"],
             "profileImageUrl": author.get("profileImageUrl", ""),
         },
-        "file": post.get("file"),
+        "files": post.get("files", []),
         "createdAt": post["createdAt"],
     }
     return success_response("POST_RETRIEVED", result)
@@ -112,3 +105,33 @@ def delete_post(post_id: int, user_id: int):
         raise_http_error(404, "POST_NOT_FOUND")
     PostsModel.delete_post(post_id)
     return success_response("POST_DELETED", None)
+
+
+def create_like(post_id: int, user_id: int):
+    """게시글 좋아요 추가."""
+    post = PostsModel.find_post_by_id(post_id)
+    if not post:
+        raise_http_error(404, "POST_NOT_FOUND")
+    if PostLikesModel.has_liked(post_id, user_id):
+        raise_http_error(409, "CONFLICT")
+    like = PostLikesModel.create_like(post_id, user_id)
+    if not like:
+        raise_http_error(409, "CONFLICT")
+    PostsModel.increment_like_count(post_id)
+    updated_post = PostsModel.find_post_by_id(post_id)
+    like_count = updated_post["likeCount"] if updated_post else 0
+    return success_response("POSTLIKE_UPLOADED", {"likeCount": like_count})
+
+
+def delete_like(post_id: int, user_id: int):
+    """게시글 좋아요 취소. 응답에 likeCount 포함."""
+    post = PostsModel.find_post_by_id(post_id)
+    if not post:
+        raise_http_error(404, "POST_NOT_FOUND")
+    if not PostLikesModel.has_liked(post_id, user_id):
+        raise_http_error(404, "LIKE_NOT_FOUND")
+    PostLikesModel.delete_like(post_id, user_id)
+    PostsModel.decrement_like_count(post_id)
+    updated_post = PostsModel.find_post_by_id(post_id)
+    like_count = updated_post["likeCount"] if updated_post else 0
+    return success_response("LIKE_DELETED", {"likeCount": like_count})

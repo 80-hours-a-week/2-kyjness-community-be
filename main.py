@@ -15,7 +15,6 @@ from app.auth.auth_route import router as auth_router
 from app.users.users_route import router as users_router
 from app.posts.posts_route import router as posts_router
 from app.comments.comments_route import router as comments_router
-from app.likes.likes_route import router as likes_router
 from app.core.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.rate_limit import rate_limit_middleware
@@ -123,7 +122,6 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(posts_router)
 app.include_router(comments_router)
-app.include_router(likes_router)
 
 
 @app.get("/")

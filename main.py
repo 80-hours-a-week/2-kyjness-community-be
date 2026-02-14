@@ -1,5 +1,6 @@
 # main.py
 import logging
+import threading
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -80,12 +81,42 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
+def _run_session_cleanup():
+    """만료된 세션 삭제. 동기 함수라 스레드에서 호출."""
+    try:
+        from app.auth.auth_model import AuthModel
+        n = AuthModel.cleanup_expired_sessions()
+        if n and n > 0:
+            logging.getLogger(__name__).info("Session cleanup: removed %d expired session(s)", n)
+    except Exception as e:
+        logging.getLogger(__name__).warning("Session cleanup failed: %s", e)
+
+
+def _session_cleanup_loop():
+    """백그라운드 스레드: SESSION_CLEANUP_INTERVAL 마다 만료 세션 정리."""
+    interval = max(60, settings.SESSION_CLEANUP_INTERVAL)
+    while True:
+        time.sleep(interval)
+        _run_session_cleanup()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """앱 시작/종료 시 DB 연결 관리"""
+    """앱 시작/종료 시 DB 연결 관리 + 만료 세션 정리(1회 및 주기 실행)"""
     from app.core.database import init_database, close_database
     init_database()
+
+    # 시작 시 1회 만료 세션 정리
+    _run_session_cleanup()
+
+    # 주기 정리 (INTERVAL > 0 이면 백그라운드 스레드)
+    cleanup_thread = None
+    if settings.SESSION_CLEANUP_INTERVAL > 0:
+        cleanup_thread = threading.Thread(target=_session_cleanup_loop, daemon=True)
+        cleanup_thread.start()
+
     yield
+
     close_database()
 
 
@@ -136,4 +167,10 @@ def root():
             "docs": "/docs",
         },
     }
+
+
+@app.get("/health", response_model=ApiResponse)
+def health():
+    """헬스 체크. 로드밸런서/모니터링용. 항상 200."""
+    return {"code": "OK", "data": {"status": "ok"}}
 

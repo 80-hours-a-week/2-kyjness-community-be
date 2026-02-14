@@ -17,6 +17,7 @@ dependencies = [
     "python-multipart>=0.0.6",  # File(), Form() 사용 시 필수 (multipart/form-data 파싱)
     "boto3>=1.28.0",  # S3 업로드 (STORAGE_BACKEND=s3 시)
     "gunicorn>=21.0.0",  # 프로덕션 서버 (uvicorn worker 사용)
+    "redis>=5.0.0",  # Rate limit 분산 (REDIS_URL 설정 시)
 ]
 
 [project.optional-dependencies]

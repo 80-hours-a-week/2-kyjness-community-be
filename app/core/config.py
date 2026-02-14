@@ -27,8 +27,13 @@ class Settings:
     
     # 세션 설정
     SESSION_EXPIRY_TIME: int = int(os.getenv("SESSION_EXPIRY_TIME", "86400"))  # 24시간
+    # 만료 세션 정리 주기(초). 0이면 주기 실행 비활성화(시작 시 1회만 실행)
+    SESSION_CLEANUP_INTERVAL: int = int(os.getenv("SESSION_CLEANUP_INTERVAL", "3600"))  # 1시간
     # Set-Cookie secure: True면 HTTPS에서만 쿠키 전송. 배포(HTTPS) 시 True 권장
     COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+
+    # Rate limit 분산 저장소. 비우면 인메모리(워커별). 설정 시 Redis 사용(워커/인스턴스 공통)
+    REDIS_URL: str = os.getenv("REDIS_URL", "").strip()
 
     # Rate limiting (IP당 RATE_LIMIT_WINDOW 초 동안 RATE_LIMIT_MAX_REQUESTS 초과 시 429)
     RATE_LIMIT_WINDOW: int = int(os.getenv("RATE_LIMIT_WINDOW", "60"))

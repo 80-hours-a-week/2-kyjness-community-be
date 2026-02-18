@@ -1,55 +1,56 @@
 # app/auth/auth_route.py
-from fastapi import APIRouter, Response, Cookie, Depends
+from fastapi import APIRouter, Cookie, Depends
+from starlette.responses import JSONResponse
 from typing import Optional
+
 from app.auth.auth_schema import SignUpRequest, LoginRequest
 from app.auth import auth_controller
+from app.core.config import settings
 from app.core.dependencies import get_current_user
+from app.core.rate_limit import check_login_rate_limit
+from app.core.response import ApiResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# 회원가입 (비밀번호는 bcrypt 해시 후 저장)
-@router.post("/signup", status_code=201)
-async def signup(signup_data: SignUpRequest):
-    """회원가입 API — 전달된 비밀번호는 bcrypt로 해시되어 저장됩니다."""
-    return auth_controller.signup(
-        email=signup_data.email,
-        password=signup_data.password,
-        nickname=signup_data.nickname,
-        profile_image_url=signup_data.profileImageUrl
-    )
 
-# 로그인 (쿠키-세션 방식, JWT 아님 — 인증 정보는 Set-Cookie로만 전달)
-@router.post("/login", status_code=200)
-async def login(login_data: LoginRequest, response: Response):
-    """로그인 API — 세션 생성 후 세션 ID만 Set-Cookie로 내려줌. body에는 토큰 없음."""
-    result, session_id = auth_controller.login(
-        email=login_data.email,
-        password=login_data.password
-    )
+@router.post("/signup", status_code=201, response_model=ApiResponse)
+async def signup(signup_data: SignUpRequest):
+    """회원가입. 프로필 이미지는 먼저 POST /v1/media/images 로 업로드 후 profileImageId 전달."""
+    return auth_controller.signup(signup_data)
+
+
+@router.post("/login", status_code=200, response_model=ApiResponse)
+async def login(
+    login_data: LoginRequest,
+    _: None = Depends(check_login_rate_limit),
+):
+    """로그인 — 세션 ID는 Set-Cookie로만 전달. IP당 분당 5회 제한."""
+    result, session_id = auth_controller.login(login_data)
+    response = JSONResponse(content=result)
     response.set_cookie(
         key="session_id",
         value=session_id,
         httponly=True,
-        secure=False,  # 개발환경(http)에서는 False. HTTPS 배포 시 True 권장
+        secure=settings.COOKIE_SECURE,
         path="/",
         samesite="lax",
-        max_age=86400,
+        max_age=settings.SESSION_EXPIRY_TIME,
     )
-    return result
+    return response
 
-# 로그아웃 (쿠키-세션 방식)
-@router.post("/logout", status_code=200)
-async def logout(response: Response, session_id: Optional[str] = Cookie(None), user_id: int = Depends(get_current_user)):
-    """로그아웃 API (쿠키-세션 방식)"""
+
+# 로그아웃 (쿠키-세션 방식). 인증 없이 호출 가능 — 만료된 세션이어도 쿠키 제거 가능
+@router.post("/logout", status_code=200, response_model=ApiResponse)
+async def logout(session_id: Optional[str] = Cookie(None)):
+    """로그아웃 API — 세션 삭제 후 쿠키 제거. 세션 없/만료여도 쿠키는 삭제함."""
     result = auth_controller.logout(session_id)
-    
-    # 쿠키 삭제 (HTTP 응답 처리)
+    response = JSONResponse(content=result)
     response.delete_cookie(key="session_id")
-    
-    return result
+    return response
 
-# 로그인 상태 체크 (쿠키-세션 방식)
-@router.get("/me", status_code=200)
+
+@router.get("/me", status_code=200, response_model=ApiResponse)
 async def get_me(user_id: int = Depends(get_current_user)):
-    """로그인 상태 체크 API (쿠키-세션 방식)"""
+    """세션 검증·로그인 여부. 프로필 조회/수정은 GET /v1/users/me."""
     return auth_controller.get_me(user_id)
+

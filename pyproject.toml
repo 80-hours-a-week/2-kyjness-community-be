@@ -7,15 +7,18 @@ requires-python = ">=3.8"
 license = {text = "MIT"}
 keywords = ["fastapi", "api", "community", "backend"]
 dependencies = [
-    "fastapi==0.104.1",
-    "uvicorn[standard]==0.24.0",
-    "pydantic==2.5.0",
-    "pydantic[email]==2.5.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.10.0",
+    "pydantic[email]>=2.10.0",
     "python-dotenv==1.0.0",
     "bcrypt==4.1.2",
     "pymysql>=1.1.0",
+    "cryptography>=41.0.0",  # MySQL caching_sha2_password 인증 지원 (MySQL 8+)
     "python-multipart>=0.0.6",  # File(), Form() 사용 시 필수 (multipart/form-data 파싱)
     "boto3>=1.28.0",  # S3 업로드 (STORAGE_BACKEND=s3 시)
+    "gunicorn>=21.0.0",  # 프로덕션 서버 (uvicorn worker 사용)
+    "redis>=5.0.0",  # Rate limit 분산 (REDIS_URL 설정 시)
 ]
 
 [project.optional-dependencies]
@@ -31,9 +34,3 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["app"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]

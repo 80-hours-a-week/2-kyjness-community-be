@@ -1,13 +1,15 @@
 # app/core/database.py
 """DB 연결 관리 (MySQL puppytalk). per-call 연결, 요청 후 close 보장."""
 
+import logging
 from contextlib import contextmanager
-from datetime import datetime
 
 import pymysql
 from pymysql.cursors import DictCursor
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -44,12 +46,10 @@ def init_database() -> bool:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(f"[{ts}] MySQL 연결 성공 ({settings.DB_NAME})", flush=True)
+        logger.info("MySQL 연결 성공 (%s)", settings.DB_NAME)
         return True
     except Exception as e:
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(f"[{ts}] MySQL 연결 실패: {e}", flush=True)
+        logger.error("MySQL 연결 실패: %s", e)
         return False
 
 

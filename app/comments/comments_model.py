@@ -83,6 +83,18 @@ class CommentsModel:
         return [cls._row_to_comment(r) for r in rows]
 
     @classmethod
+    def get_comment_count_by_post_id(cls, post_id: int) -> int:
+        """게시글별 댓글 총 개수"""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COUNT(*) AS cnt FROM comments WHERE post_id = %s AND deleted_at IS NULL",
+                    (post_id,),
+                )
+                row = cur.fetchone()
+        return row["cnt"] or 0
+
+    @classmethod
     def update_comment(cls, comment_id: int, content: str) -> bool:
         """댓글 수정"""
         with get_connection() as conn:

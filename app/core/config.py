@@ -20,34 +20,38 @@ class Settings:
         origin.strip()
         for origin in os.getenv(
             "CORS_ORIGINS",
-            "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5500,http://127.0.0.1:5500",
+            "http://127.0.0.1:5500",
         ).split(",")
         if origin.strip()
     ]
     
     # 세션 설정
     SESSION_EXPIRY_TIME: int = int(os.getenv("SESSION_EXPIRY_TIME", "86400"))  # 24시간
+    # 만료 세션 정리 주기(초). 0이면 주기 실행 비활성화(시작 시 1회만 실행)
+    SESSION_CLEANUP_INTERVAL: int = int(os.getenv("SESSION_CLEANUP_INTERVAL", "3600"))  # 1시간
+    # Set-Cookie secure: True면 HTTPS에서만 쿠키 전송. 배포(HTTPS) 시 True 권장
+    COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
-    # Rate limiting (추후 미들웨어 등에서 사용 시 참조)
+    # Rate limit 분산 저장소. 비우면 인메모리(워커별). 설정 시 Redis 사용(워커/인스턴스 공통)
+    REDIS_URL: str = os.getenv("REDIS_URL", "").strip()
+
+    # Rate limiting (IP당 RATE_LIMIT_WINDOW 초 동안 RATE_LIMIT_MAX_REQUESTS 초과 시 429)
     RATE_LIMIT_WINDOW: int = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
     RATE_LIMIT_MAX_REQUESTS: int = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "100"))
+    # 로그인 전용 (브루트포스 방지): IP당 분당 시도 횟수 제한
+    LOGIN_RATE_LIMIT_WINDOW: int = int(os.getenv("LOGIN_RATE_LIMIT_WINDOW", "60"))
+    LOGIN_RATE_LIMIT_MAX_ATTEMPTS: int = int(os.getenv("LOGIN_RATE_LIMIT_MAX_ATTEMPTS", "5"))
 
     # 파일 업로드 설정
     MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB
-    MAX_VIDEO_SIZE: int = int(os.getenv("MAX_VIDEO_SIZE", "52428800"))  # 50MB
     ALLOWED_IMAGE_TYPES: List[str] = [
         img_type.strip()
         for img_type in os.getenv("ALLOWED_IMAGE_TYPES", "image/jpeg,image/jpg,image/png").split(",")
         if img_type.strip()
     ]
-    ALLOWED_VIDEO_TYPES: List[str] = [
-        v.strip()
-        for v in os.getenv("ALLOWED_VIDEO_TYPES", "video/mp4,video/webm").split(",")
-        if v.strip()
-    ]
     
     # API 기본 URL (파일 업로드 URL 생성용, local 저장 시 사용)
-    BE_API_URL: str = os.getenv("BE_API_URL", "http://localhost:8000")
+    BE_API_URL: str = os.getenv("BE_API_URL", "http://127.0.0.1:8000")
 
     # 파일 저장소: "local" = upload 폴더, "s3" = AWS S3 (배포 시 권장)
     STORAGE_BACKEND: str = os.getenv("STORAGE_BACKEND", "local")

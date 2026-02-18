@@ -1,5 +1,5 @@
 # app/core/file_upload.py
-"""파일 업로드: 검증, 저장, URL 생성. 프로필/게시글 이미지·비디오. local | S3 지원."""
+"""파일 업로드 인프라: 검증, 저장, URL 생성. local | S3. 실제 API는 app.media에서 제공."""
 
 import uuid
 from pathlib import Path
@@ -8,19 +8,15 @@ from typing import List, Optional
 from fastapi import UploadFile
 
 from app.core.config import settings
+from app.core.codes import ApiCode
 from app.core.response import raise_http_error
 
-PROFILE_ALLOWED_TYPES = ["image/jpeg", "image/jpg"]
-POST_ALLOWED_TYPES = settings.ALLOWED_IMAGE_TYPES
-POST_VIDEO_ALLOWED_TYPES = settings.ALLOWED_VIDEO_TYPES
 MAX_FILE_SIZE = settings.MAX_FILE_SIZE
-MAX_VIDEO_SIZE = settings.MAX_VIDEO_SIZE
 
-# 프로젝트 루트 기준 upload 폴더 (STORAGE_BACKEND=local 시, main.py에서 StaticFiles 마운트)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-UPLOAD_PROFILE_DIR = PROJECT_ROOT / "upload" / "image" / "profile"
-UPLOAD_POST_DIR = PROJECT_ROOT / "upload" / "image" / "post"
-UPLOAD_VIDEO_DIR = PROJECT_ROOT / "upload" / "video" / "post"
+UPLOAD_DIR = PROJECT_ROOT / "upload"
+# 저장 서브폴더: profile(회원 프로필), post(게시글 이미지). images 폴더는 사용하지 않음.
+VALID_UPLOAD_FOLDERS = ("profile", "post")
 
 
 def _s3_upload(key: str, content: bytes, content_type: str) -> str:
@@ -52,24 +48,19 @@ async def _validate_image(
     allowed_types: List[str],
     max_size: int = MAX_FILE_SIZE,
 ) -> bytes:
-    """이미지 검증: 존재·Content-Type·크기·확장자. bytes 반환."""
+    """이미지 검증: 존재·Content-Type·크기만. 확장자는 제한하지 않음."""
     if not file:
-        raise_http_error(400, "MISSING_REQUIRED_FIELD")
+        raise_http_error(400, ApiCode.MISSING_REQUIRED_FIELD)
 
     if file.content_type not in allowed_types:
-        raise_http_error(400, "INVALID_FILE_TYPE")
+        raise_http_error(400, ApiCode.INVALID_FILE_TYPE)
 
     content = await file.read()
     if not content:
-        raise_http_error(400, "INVALID_IMAGE_FILE")
+        raise_http_error(400, ApiCode.INVALID_IMAGE_FILE)
 
     if len(content) > max_size:
-        raise_http_error(400, "FILE_SIZE_EXCEEDED")
-
-    if file.filename:
-        ext = file.filename.lower().split(".")[-1] if "." in file.filename else ""
-        if ext not in ["jpg", "jpeg", "png"]:
-            raise_http_error(400, "INVALID_FILE_TYPE")
+        raise_http_error(400, ApiCode.FILE_SIZE_EXCEEDED)
 
     return content
 
@@ -79,106 +70,45 @@ async def validate_image_upload(
     allowed_types: List[str],
     max_size: int = MAX_FILE_SIZE,
 ) -> bytes:
-    """
-    이미지 업로드 검증만 수행 (게시글 등 다른 용도에서 재사용).
-    검증+저장+URL이 필요하면 save_profile_image 사용.
-    """
+    """이미지 검증만 수행. 저장까지 필요하면 save_image_for_media 사용 (media_controller 경유)."""
     return await _validate_image(file, allowed_types, max_size)
 
 
-async def save_profile_image(file: Optional[UploadFile]) -> str:
-    """
-    프로필 이미지: 검증 + 저장 + URL 반환.
-    STORAGE_BACKEND=local → upload/image/profile, s3 → S3 버킷 image/profile/
-    """
-    content = await _validate_image(
-        file,
-        allowed_types=PROFILE_ALLOWED_TYPES,
-        max_size=MAX_FILE_SIZE,
-    )
-
-    filename = f"{uuid.uuid4().hex}.jpg"
-    if settings.STORAGE_BACKEND == "s3":
-        key = f"image/profile/{filename}"
-        return _s3_upload(key, content, "image/jpeg")
-    UPLOAD_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-    filepath = UPLOAD_PROFILE_DIR / filename
-    filepath.write_bytes(content)
-    return f"{settings.BE_API_URL}/upload/image/profile/{filename}"
+def _safe_extension(filename: Optional[str], content_type: str) -> str:
+    """파일명에서 확장자 추출. 없거나 비정상이면 content_type 기준으로 반환."""
+    if filename and "." in filename:
+        ext = filename.lower().split(".")[-1].strip()
+        if ext and len(ext) <= 5 and ext.isalnum():
+            return ext
+    if "png" in content_type:
+        return "png"
+    return "jpg"
 
 
-async def save_post_image(post_id: int, file: Optional[UploadFile]) -> str:
-    """
-    게시글 이미지: 검증 + 저장 + URL 반환.
-    STORAGE_BACKEND=local → upload/image/post, s3 → S3 버킷 image/post/
-    """
-    content = await _validate_image(
-        file,
-        allowed_types=POST_ALLOWED_TYPES,
-        max_size=MAX_FILE_SIZE,
-    )
-
-    ext = "jpg"
-    if file.filename and "." in file.filename:
-        ext = file.filename.lower().split(".")[-1]
-        if ext not in ("jpg", "jpeg", "png"):
-            ext = "jpg"
-    filename = f"{post_id}_{uuid.uuid4().hex}.{ext}"
-    content_type = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
-
-    if settings.STORAGE_BACKEND == "s3":
-        key = f"image/post/{filename}"
-        return _s3_upload(key, content, content_type)
-    UPLOAD_POST_DIR.mkdir(parents=True, exist_ok=True)
-    filepath = UPLOAD_POST_DIR / filename
-    filepath.write_bytes(content)
-    return f"{settings.BE_API_URL}/upload/image/post/{filename}"
-
-
-async def _validate_video(
+async def save_image_for_media(
     file: Optional[UploadFile],
-    allowed_types: List[str],
-    max_size: int = MAX_VIDEO_SIZE,
-) -> bytes:
-    """비디오 검증: 존재·Content-Type·크기·확장자. bytes 반환."""
-    if not file:
-        raise_http_error(400, "MISSING_REQUIRED_FIELD")
-    if file.content_type not in allowed_types:
-        raise_http_error(400, "INVALID_FILE_TYPE")
-    content = await file.read()
-    if not content:
-        raise_http_error(400, "INVALID_VIDEO_FILE")
-    if len(content) > max_size:
-        raise_http_error(400, "FILE_SIZE_EXCEEDED")
-    if file.filename:
-        ext = file.filename.lower().split(".")[-1] if "." in file.filename else ""
-        if ext not in ("mp4", "webm"):
-            raise_http_error(400, "INVALID_FILE_TYPE")
-    return content
-
-
-async def save_post_video(post_id: int, file: Optional[UploadFile]) -> str:
+    allowed_types: Optional[List[str]] = None,
+    max_size: int = MAX_FILE_SIZE,
+    folder: str = "post",
+) -> tuple[str, str, str, int]:
     """
-    게시글 비디오: 검증 + 저장 + URL 반환.
-    STORAGE_BACKEND=local → upload/video/post, s3 → S3 버킷 video/post/
+    이미지 검증 후 저장. (file_key, file_url, content_type, size) 반환.
+    folder: "profile"(회원 프로필) | "post"(게시글). 메타 저장은 media_controller에서 수행.
     """
-    content = await _validate_video(
-        file,
-        allowed_types=POST_VIDEO_ALLOWED_TYPES,
-        max_size=MAX_VIDEO_SIZE,
-    )
-    ext = "mp4"
-    if file.filename and "." in file.filename:
-        e = file.filename.lower().split(".")[-1]
-        if e in ("mp4", "webm"):
-            ext = e
-    content_type = "video/mp4" if ext == "mp4" else "video/webm"
-    filename = f"{post_id}_{uuid.uuid4().hex}.{ext}"
-
+    if folder not in VALID_UPLOAD_FOLDERS:
+        folder = "post"
+    types = allowed_types or settings.ALLOWED_IMAGE_TYPES
+    content = await _validate_image(file, allowed_types=types, max_size=max_size)
+    ext = _safe_extension(file.filename if file else None, file.content_type or "")
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    ct = file.content_type or "image/jpeg"
+    key = f"{folder}/{filename}"
     if settings.STORAGE_BACKEND == "s3":
-        key = f"video/post/{filename}"
-        return _s3_upload(key, content, content_type)
-    UPLOAD_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-    filepath = UPLOAD_VIDEO_DIR / filename
-    filepath.write_bytes(content)
-    return f"{settings.BE_API_URL}/upload/video/post/{filename}"
+        url = _s3_upload(key, content, ct)
+    else:
+        subdir = UPLOAD_DIR / folder
+        subdir.mkdir(parents=True, exist_ok=True)
+        filepath = subdir / filename
+        filepath.write_bytes(content)
+        url = f"{settings.BE_API_URL}/upload/{folder}/{filename}"
+    return key, url, ct, len(content)

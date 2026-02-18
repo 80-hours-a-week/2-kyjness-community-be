@@ -27,18 +27,13 @@ def validate_nickname_format(nickname: str) -> bool:
     return bool(nickname and isinstance(nickname, str) and NICKNAME_PATTERN.match(nickname))
 
 
-def validate_profile_image_url(url: Optional[str]) -> bool:
-    """프로필 이미지 URL 형식 검증. None/빈 문자열은 허용."""
+def validate_url(url: Optional[str]) -> bool:
+    """URL 형식 검증 (프로필 이미지, 게시글 파일 등). None/빈 문자열은 허용."""
     if url is None or (isinstance(url, str) and not url.strip()):
         return True
     if not isinstance(url, str):
         return False
     return url.startswith("http://") or url.startswith("https://") or url.startswith(settings.BE_API_URL)
-
-
-def validate_file_url(url: Optional[str]) -> bool:
-    """파일 URL 형식 검증 (게시글 등). None/빈 문자열 허용."""
-    return validate_profile_image_url(url)
 
 
 # --- Pydantic field_validator용 래퍼 (ValueError로 에러 코드 전달) ---
@@ -60,13 +55,13 @@ def ensure_nickname_format(v: str) -> str:
 
 def ensure_profile_image_url(v: Optional[str]) -> Optional[str]:
     """프로필 이미지 URL 형식 검증. 실패 시 INVALID_PROFILEIMAGEURL."""
-    if not validate_profile_image_url(v):
+    if not validate_url(v):
         raise ValueError("INVALID_PROFILEIMAGEURL")
     return v
 
 
 def ensure_file_url(v: Optional[str]) -> Optional[str]:
-    """파일 URL 형식 검증. 실패 시 INVALID_FILE_URL."""
-    if not validate_file_url(v):
+    """파일 URL 형식 검증 (게시글 등). 실패 시 INVALID_FILE_URL."""
+    if not validate_url(v):
         raise ValueError("INVALID_FILE_URL")
     return v

@@ -2,7 +2,7 @@
 # DTO(Pydantic): 입력 존재 여부·타입·형식 검증. validators.py(ensure_*) 단일 소스.
 # 전처리(strip→None)로 model_validator 단순화, 길이/형식은 ensure_*에서만 검증하여 에러코드 일관.
 from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Optional, Dict, Any
+from typing import Optional
 
 from app.core.validators import (
     ensure_password_format,
@@ -20,9 +20,9 @@ def _strip_empty_to_none(v):
     return v
 
 
-# --- GET /users?email=...|?nickname=... (중복 체크) Query DTO ---
-class CheckUserExistsQuery(BaseModel):
-    """email 또는 nickname 중 정확히 하나만 비어 있지 않아야 함. 닉네임 형식은 ensure_*로 검증."""
+# --- GET /v1/users/availability (이메일·닉네임 가용 여부) Query DTO ---
+class AvailabilityQuery(BaseModel):
+    """email, nickname 중 최소 하나는 비어 있지 않아야 함. 닉네임 형식은 ensure_*로 검증."""
     email: Optional[str] = None
     nickname: Optional[str] = None
 
@@ -32,10 +32,10 @@ class CheckUserExistsQuery(BaseModel):
         return _strip_empty_to_none(v)
 
     @model_validator(mode="after")
-    def exactly_one_non_empty(self):
-        if not self.email and not self.nickname:
+    def at_least_one(self):
+        if self.email is None and self.nickname is None:
             raise ValueError("INVALID_REQUEST")
-        if self.email and self.nickname:
+        if not self.email and not self.nickname:
             raise ValueError("INVALID_REQUEST")
         return self
 
@@ -48,18 +48,18 @@ class CheckUserExistsQuery(BaseModel):
 
 # --- PATCH /users/me (내 정보 수정) Body DTO ---
 class UpdateUserRequest(BaseModel):
-    """닉네임 또는 profileImageUrl 중 최소 하나 필수. 길이/형식은 ensure_*에서만 검증."""
+    """닉네임 또는 profileImageId 중 최소 하나 필수. 프로필 이미지는 미리 POST /v1/media/images 로 업로드 후 id 전달."""
     nickname: Optional[str] = Field(default=None, description="닉네임 (1~10자 한글/영/숫자)")
-    profileImageUrl: Optional[str] = Field(default=None, description="프로필 이미지 URL")
+    profileImageId: Optional[int] = Field(default=None, description="프로필 이미지 ID (media 업로드 후 반환된 id)")
 
-    @field_validator("nickname", "profileImageUrl", mode="before")
+    @field_validator("nickname", mode="before")
     @classmethod
     def strip_empty_to_none(cls, v):
         return _strip_empty_to_none(v)
 
     @model_validator(mode="after")
     def at_least_one(self):
-        if self.nickname is None and self.profileImageUrl is None:
+        if self.nickname is None and self.profileImageId is None:
             raise ValueError("MISSING_REQUIRED_FIELD")
         return self
 
@@ -69,13 +69,6 @@ class UpdateUserRequest(BaseModel):
         if v is None:
             return v
         return ensure_nickname_format(v)
-
-    @field_validator("profileImageUrl", mode="after")
-    @classmethod
-    def profile_image_url_format(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        return ensure_profile_image_url(v)
 
 
 # --- PATCH /users/me/password (비밀번호 변경) Body DTO ---
@@ -89,12 +82,7 @@ class UpdatePasswordRequest(BaseModel):
     def new_password_format(cls, v: str) -> str:
         return ensure_password_format(v)
 
-# 공통 응답 바디
-class UsersResponse(BaseModel):
-    code: str
-    data: Optional[Dict[str, Any]] = None
-
-# 내 정보 조회 응답 데이터
+# 내 정보 조회 응답 데이터 (data 필드용)
 class UserRetrievedData(BaseModel):
     userId: int
     email: str
@@ -102,14 +90,3 @@ class UserRetrievedData(BaseModel):
     profileImageUrl: str
     createdAt: str
 
-# 프로필 이미지 업로드 응답 데이터
-class ProfileImageUploadData(BaseModel):
-    profileImageUrl: str
-
-# 이메일 중복 체크 응답 데이터
-class EmailAvailableData(BaseModel):
-    available: bool
-
-# 닉네임 중복 체크 응답 데이터
-class NicknameAvailableData(BaseModel):
-    available: bool

@@ -17,6 +17,7 @@ from app.users.users_route import router as users_router
 from app.posts.posts_route import router as posts_router
 from app.comments.comments_route import router as comments_router
 from app.core.config import settings
+from app.core.codes import ApiCode
 from app.core.exception_handlers import register_exception_handlers
 from app.core.rate_limit import rate_limit_middleware
 from app.core.response import ApiResponse
@@ -56,6 +57,8 @@ async def access_log_middleware(request: Request, call_next):
     start = time.perf_counter()
     response = await call_next(request)
     duration_ms = (time.perf_counter() - start) * 1000
+    if settings.DEBUG:
+        response.headers["X-Process-Time"] = f"{duration_ms:.2f}"
     client = request.client.host if request.client else "-"
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
@@ -72,12 +75,10 @@ async def access_log_middleware(request: Request, call_next):
 
 
 async def add_security_headers(request: Request, call_next):
-    """보안 헤더 + Process-Time(DEBUG)"""
+    """보안 헤더 (X-Frame-Options, X-Content-Type-Options)."""
     response = await call_next(request)
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
-    if settings.DEBUG:
-        response.headers["X-Process-Time"] = "0"
     return response
 
 
@@ -160,7 +161,7 @@ app.include_router(comments_router)
 def root():
     """API 정보"""
     return {
-        "code": "OK",
+        "code": ApiCode.OK.value,
         "data": {
             "message": "PuppyTalk API is running!",
             "version": "1.0.0",
@@ -172,5 +173,5 @@ def root():
 @app.get("/health", response_model=ApiResponse)
 def health():
     """헬스 체크. 로드밸런서/모니터링용. 항상 200."""
-    return {"code": "OK", "data": {"status": "ok"}}
+    return {"code": ApiCode.OK.value, "data": {"status": "ok"}}
 

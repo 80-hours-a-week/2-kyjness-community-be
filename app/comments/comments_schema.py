@@ -1,5 +1,6 @@
 # app/comments/comments_schema.py
 from pydantic import BaseModel, Field
+from typing import Optional
 
 # 댓글 작성 요청
 class CommentCreateRequest(BaseModel):
@@ -15,9 +16,10 @@ class CommentAuthorInfo(BaseModel):
     nickname: str
     profileImageUrl: str
 
-# 댓글 목록조회/상세조회 성공 응답
+# 댓글 목록조회/상세조회 성공 응답 (data 항목용)
 class CommentResponse(BaseModel):
     commentId: int
     content: str
     author: CommentAuthorInfo
     createdAt: str
+    postId: Optional[int] = None  # 목록 조회 시 포함

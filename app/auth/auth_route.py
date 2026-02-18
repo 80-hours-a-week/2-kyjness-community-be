@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.core.dependencies import get_current_user
 from app.core.file_upload import save_profile_image
 from app.core.rate_limit import check_login_rate_limit
+from app.core.codes import ApiCode
 from app.core.response import ApiResponse, success_response
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -19,7 +20,7 @@ async def upload_signup_profile_image(
 ):
     """회원가입 화면에서 선택한 프로필 이미지를 업로드하고 URL을 반환. 이후 POST /auth/signup 시 profileImageUrl로 전달."""
     profile_image_url = await save_profile_image(profileImage)
-    return success_response("PROFILE_IMAGE_UPLOADED", {"profileImageUrl": profile_image_url})
+    return success_response(ApiCode.PROFILE_IMAGE_UPLOADED, {"profileImageUrl": profile_image_url})
 
 
 # 회원가입 (비밀번호는 bcrypt 해시 후 저장)

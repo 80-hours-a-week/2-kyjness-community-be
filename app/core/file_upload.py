@@ -8,6 +8,7 @@ from typing import List, Optional
 from fastapi import UploadFile
 
 from app.core.config import settings
+from app.core.codes import ApiCode
 from app.core.response import raise_http_error
 
 # 프로필·게시글 이미지 모두 config와 동일 (jpeg/jpg/png)
@@ -52,17 +53,17 @@ async def _validate_image(
 ) -> bytes:
     """이미지 검증: 존재·Content-Type·크기만. 확장자는 제한하지 않음."""
     if not file:
-        raise_http_error(400, "MISSING_REQUIRED_FIELD")
+        raise_http_error(400, ApiCode.MISSING_REQUIRED_FIELD)
 
     if file.content_type not in allowed_types:
-        raise_http_error(400, "INVALID_FILE_TYPE")
+        raise_http_error(400, ApiCode.INVALID_FILE_TYPE)
 
     content = await file.read()
     if not content:
-        raise_http_error(400, "INVALID_IMAGE_FILE")
+        raise_http_error(400, ApiCode.INVALID_IMAGE_FILE)
 
     if len(content) > max_size:
-        raise_http_error(400, "FILE_SIZE_EXCEEDED")
+        raise_http_error(400, ApiCode.FILE_SIZE_EXCEEDED)
 
     return content
 

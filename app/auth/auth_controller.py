@@ -5,6 +5,8 @@ import logging
 from typing import Optional
 
 from app.auth.auth_model import AuthModel
+from app.auth.auth_schema import LoginData, MeData
+from app.core.codes import ApiCode
 from app.core.response import success_response, raise_http_error
 
 logger = logging.getLogger(__name__)
@@ -18,11 +20,11 @@ def signup(
 ):
     # 비밀번호·닉네임·profileImageUrl 형식 검증은 DTO(SignUpRequest)에서 완료
     if AuthModel.email_exists(email):
-        raise_http_error(409, "EMAIL_ALREADY_EXISTS")
+        raise_http_error(409, ApiCode.EMAIL_ALREADY_EXISTS)
     if AuthModel.nickname_exists(nickname):
-        raise_http_error(409, "NICKNAME_ALREADY_EXISTS")
+        raise_http_error(409, ApiCode.NICKNAME_ALREADY_EXISTS)
     AuthModel.create_user(email, password, nickname, profile_image_url)
-    return success_response("SIGNUP_SUCCESS")
+    return success_response(ApiCode.SIGNUP_SUCCESS)
 
 
 def login(email: str, password: str):
@@ -31,28 +33,30 @@ def login(email: str, password: str):
     user = AuthModel.find_user_by_email(email)
     if not user:
         logger.warning("Login failed: User not found")
-        raise_http_error(401, "INVALID_CREDENTIALS")
+        raise_http_error(401, ApiCode.INVALID_CREDENTIALS)
     if not AuthModel.verify_password(user["userId"], password):
         logger.warning("Login failed: Invalid password")
-        raise_http_error(401, "INVALID_CREDENTIALS")
+        raise_http_error(401, ApiCode.INVALID_CREDENTIALS)
     session_id = AuthModel.create_session(user["userId"])
-    response_body = success_response("LOGIN_SUCCESS", {
-        "userId": user["userId"],
-        "email": user["email"],
-        "nickname": user["nickname"],
-        "profileImageUrl": user["profileImageUrl"],
-    })
-    return response_body, session_id
+    data = LoginData(
+        userId=user["userId"],
+        email=user["email"],
+        nickname=user["nickname"],
+        profileImageUrl=user["profileImageUrl"],
+    ).model_dump()
+    return success_response(ApiCode.LOGIN_SUCCESS, data), session_id
 
 
 def logout(session_id: Optional[str]):
     AuthModel.revoke_session(session_id)
-    return success_response("LOGOUT_SUCCESS")
+    return success_response(ApiCode.LOGOUT_SUCCESS)
+
 
 def get_me(user_id: int):
     """세션 검증용. 최소 4개 필드만 반환. 프로필 전체는 GET /users/me."""
     user = AuthModel.get_user_minimal_for_session(user_id)
     if not user:
-        raise_http_error(401, "UNAUTHORIZED")
-    return success_response("AUTH_SUCCESS", user)
+        raise_http_error(401, ApiCode.UNAUTHORIZED)
+    data = MeData(**user).model_dump()
+    return success_response(ApiCode.AUTH_SUCCESS, data)
 

@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from app.users.users_schema import UpdateUserRequest, UpdatePasswordRequest, CheckUserExistsQuery
 from app.users import users_controller
+from app.core.codes import ApiCode
 from app.core.dependencies import get_current_user
 from app.core.response import ApiResponse, raise_http_error
 
@@ -21,7 +22,7 @@ def get_check_user_query(
     try:
         return CheckUserExistsQuery(email=email, nickname=nickname)
     except ValidationError:
-        raise_http_error(400, "INVALID_REQUEST")
+        raise_http_error(400, ApiCode.INVALID_REQUEST)
 
 
 # GET /users?email=... 또는 ?nickname=... (중복 체크). 입력 검증은 DTO.

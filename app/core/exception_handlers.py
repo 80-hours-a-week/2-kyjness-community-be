@@ -8,20 +8,22 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.core.codes import ApiCode
+
 logger = logging.getLogger(__name__)
 
 
-# 라우트 없음(404), 메서드 불일치(405) 등 공통 code 매핑 (Postman 등 어떤 요청이든 { code, data } 형식 보장)
+# 라우트 없음(404), 메서드 불일치(405) 등 공통 code 매핑
 HTTP_STATUS_TO_CODE = {
-    400: "INVALID_REQUEST",
-    401: "UNAUTHORIZED",
-    403: "FORBIDDEN",
-    404: "NOT_FOUND",
-    405: "METHOD_NOT_ALLOWED",
-    409: "CONFLICT",
-    422: "UNPROCESSABLE_ENTITY",
-    429: "RATE_LIMIT_EXCEEDED",
-    500: "INTERNAL_SERVER_ERROR",
+    400: ApiCode.INVALID_REQUEST,
+    401: ApiCode.UNAUTHORIZED,
+    403: ApiCode.FORBIDDEN,
+    404: ApiCode.NOT_FOUND,
+    405: ApiCode.METHOD_NOT_ALLOWED,
+    409: ApiCode.CONFLICT,
+    422: ApiCode.UNPROCESSABLE_ENTITY,
+    429: ApiCode.RATE_LIMIT_EXCEEDED,
+    500: ApiCode.INTERNAL_SERVER_ERROR,
 }
 
 
@@ -41,7 +43,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             request.url.path,
             exc.errors(),
         )
-        code = "INVALID_REQUEST_BODY"
+        code = ApiCode.INVALID_REQUEST_BODY.value
         for err in exc.errors():
             msg = err.get("msg", "")
             if isinstance(msg, str):
@@ -49,7 +51,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                     if known in msg or msg == known:
                         code = known
                         break
-                if code != "INVALID_REQUEST_BODY":
+                if code != ApiCode.INVALID_REQUEST_BODY.value:
                     break
         return JSONResponse(
             status_code=400,
@@ -78,12 +80,13 @@ def register_exception_handlers(app: FastAPI) -> None:
             return JSONResponse(status_code=exc.status_code, content=exc.detail)
         code = HTTP_STATUS_TO_CODE.get(exc.status_code)
         if not code and isinstance(exc.detail, dict):
-            code = exc.detail.get("code", "HTTP_ERROR")
-        if not code:
-            code = str(exc.detail) if exc.detail else "HTTP_ERROR"
+            code = exc.detail.get("code", ApiCode.HTTP_ERROR.value)
+        if code is None:
+            code = str(exc.detail) if exc.detail else ApiCode.HTTP_ERROR.value
+        code_str = code.value if isinstance(code, ApiCode) else code
         return JSONResponse(
             status_code=exc.status_code,
-            content={"code": code, "data": None},
+            content={"code": code_str, "data": None},
         )
 
     # DB 예외: 중복키/무결성/연결실패 등 { code, data } 통일
@@ -97,10 +100,10 @@ def register_exception_handlers(app: FastAPI) -> None:
         errno = getattr(exc, "args", (0, ""))[0] if exc.args else 0
         # 1062=Duplicate entry (UNIQUE 위반), 1452=FK violation
         if errno == 1062:
-            return JSONResponse(status_code=409, content={"code": "CONFLICT", "data": None})
+            return JSONResponse(status_code=409, content={"code": ApiCode.CONFLICT.value, "data": None})
         if errno in (1451, 1452):  # FK 제약 위반
-            return JSONResponse(status_code=409, content={"code": "CONSTRAINT_ERROR", "data": None})
-        return JSONResponse(status_code=400, content={"code": "INVALID_REQUEST", "data": None})
+            return JSONResponse(status_code=409, content={"code": ApiCode.CONSTRAINT_ERROR.value, "data": None})
+        return JSONResponse(status_code=400, content={"code": ApiCode.INVALID_REQUEST.value, "data": None})
 
     @app.exception_handler(pymysql.err.OperationalError)
     async def operational_error_handler(request: Request, exc: pymysql.err.OperationalError):
@@ -109,7 +112,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             request.url.path,
             getattr(exc, "args", ())[:1],
         )
-        return JSONResponse(status_code=500, content={"code": "DB_ERROR", "data": None})
+        return JSONResponse(status_code=500, content={"code": ApiCode.DB_ERROR.value, "data": None})
 
     @app.exception_handler(pymysql.err.Error)
     async def pymysql_error_handler(request: Request, exc: pymysql.err.Error):
@@ -118,7 +121,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             request.url.path,
             type(exc).__name__,
         )
-        return JSONResponse(status_code=500, content={"code": "DB_ERROR", "data": None})
+        return JSONResponse(status_code=500, content={"code": ApiCode.DB_ERROR.value, "data": None})
 
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
@@ -131,6 +134,6 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
         return JSONResponse(
             status_code=500,
-            content={"code": "INTERNAL_SERVER_ERROR", "data": None},
+            content={"code": ApiCode.INTERNAL_SERVER_ERROR.value, "data": None},
         )
 

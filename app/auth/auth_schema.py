@@ -1,7 +1,7 @@
 # app/auth/auth_schema.py
 # DTO(Pydantic): 입력 형식 검증 책임. validators.py를 단일 소스로 사용.
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import Optional, Dict, Any
+from typing import Optional
 
 from app.core.validators import (
     ensure_password_format,
@@ -47,12 +47,7 @@ class LoginRequest(BaseModel):
     def password_format(cls, v: str) -> str:
         return ensure_password_format(v)
 
-# 공통 응답 바디
-class AuthResponse(BaseModel):
-    code: str
-    data: Optional[Dict[str, Any]] = None
-
-# 로그인 성공 응답 데이터
+# 로그인 성공 응답 데이터 (data 필드용)
 class LoginData(BaseModel):
     userId: int
     email: str

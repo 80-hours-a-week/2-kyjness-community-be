@@ -32,10 +32,6 @@ class PostUpdateRequest(BaseModel):
             return v
         return ensure_file_url(v)
 
-# 게시글 이미지 업로드 응답
-class PostImageUploadResponse(BaseModel):
-    postFileUrl: str
-
 # 저자 정보
 class AuthorInfo(BaseModel):
     userId: int
@@ -47,20 +43,8 @@ class FileInfo(BaseModel):
     fileId: int
     fileUrl: str
 
-# 게시글 목록조회 성공 응답
+# 게시글 목록/상세 공통 응답 (data 필드용)
 class PostResponse(BaseModel):
-    postId: int
-    title: str
-    content: str
-    hits: int
-    likeCount: int
-    commentCount: int
-    author: AuthorInfo
-    files: List[FileInfo] = Field(default_factory=list, description="이미지 목록 (최대 5장)")
-    createdAt: str
-
-# 게시글 상세조회 성공 응답
-class PostDetailResponse(BaseModel):
     postId: int
     title: str
     content: str

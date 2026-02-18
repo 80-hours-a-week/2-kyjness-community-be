@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request as StarletteRequest
 
 from app.core.config import settings
+from app.core.codes import ApiCode
 from app.core.response import raise_http_error
 
 # 인메모리 fallback (REDIS_URL 없을 때). 워커별 메모리.
@@ -115,11 +116,11 @@ async def check_login_rate_limit(request: Request) -> None:
     else:
         rejected = await _memory_login_check(request)
     if rejected:
-        raise_http_error(429, "LOGIN_RATE_LIMIT_EXCEEDED")
+        raise_http_error(429, ApiCode.LOGIN_RATE_LIMIT_EXCEEDED)
 
 
 async def rate_limit_middleware(request: StarletteRequest, call_next: Callable):
-    """IP당 RATE_LIMIT_WINDOW 초 동안 RATE_LIMIT_MAX_REQUESTS 초과 시 429. /health, /ready 제외."""
+    """IP당 RATE_LIMIT_WINDOW 초 동안 RATE_LIMIT_MAX_REQUESTS 초과 시 429. /health 제외."""
     if request.url.path in _SKIP_PATHS:
         return await call_next(request)
 
@@ -130,7 +131,7 @@ async def rate_limit_middleware(request: StarletteRequest, call_next: Callable):
         if rejected:
             return JSONResponse(
                 status_code=429,
-                content={"code": "RATE_LIMIT_EXCEEDED", "data": None},
+                content={"code": ApiCode.RATE_LIMIT_EXCEEDED.value, "data": None},
             )
         return await call_next(request)
     else:
@@ -148,7 +149,7 @@ async def rate_limit_middleware(request: StarletteRequest, call_next: Callable):
             if len(times) >= max_requests:
                 return JSONResponse(
                     status_code=429,
-                    content={"code": "RATE_LIMIT_EXCEEDED", "data": None},
+                    content={"code": ApiCode.RATE_LIMIT_EXCEEDED.value, "data": None},
                 )
             _request_times[ip] = times
             times.append(now)

@@ -2,7 +2,7 @@
 # DTO(Pydantic): 입력 존재 여부·타입·형식 검증. validators.py(ensure_*) 단일 소스.
 # 전처리(strip→None)로 model_validator 단순화, 길이/형식은 ensure_*에서만 검증하여 에러코드 일관.
 from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Optional, Dict, Any
+from typing import Optional
 
 from app.core.validators import (
     ensure_password_format,
@@ -89,12 +89,7 @@ class UpdatePasswordRequest(BaseModel):
     def new_password_format(cls, v: str) -> str:
         return ensure_password_format(v)
 
-# 공통 응답 바디
-class UsersResponse(BaseModel):
-    code: str
-    data: Optional[Dict[str, Any]] = None
-
-# 내 정보 조회 응답 데이터
+# 내 정보 조회 응답 데이터 (data 필드용)
 class UserRetrievedData(BaseModel):
     userId: int
     email: str
@@ -102,14 +97,3 @@ class UserRetrievedData(BaseModel):
     profileImageUrl: str
     createdAt: str
 
-# 프로필 이미지 업로드 응답 데이터
-class ProfileImageUploadData(BaseModel):
-    profileImageUrl: str
-
-# 이메일 중복 체크 응답 데이터
-class EmailAvailableData(BaseModel):
-    available: bool
-
-# 닉네임 중복 체크 응답 데이터
-class NicknameAvailableData(BaseModel):
-    available: bool

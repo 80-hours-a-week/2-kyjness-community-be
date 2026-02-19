@@ -1,10 +1,32 @@
+-- puppytalk DB 스키마 (복붙 후 그대로 실행 가능, 재실행 시 기존 테이블 삭제 후 재생성)
+-- 사용: mysql -u root -p < docs/puppyytalkdb.sql  또는 클라이언트에서 전체 선택 후 실행
+
+CREATE DATABASE IF NOT EXISTS puppytalk
+  DEFAULT CHARACTER SET utf8mb4
+  DEFAULT COLLATE utf8mb4_unicode_ci;
+
+USE puppytalk;
+
+-- 기존 테이블 제거 (FK 때문에 순서 무관하도록 체크 비활성화)
+SET FOREIGN_KEY_CHECKS = 0;
+
+DROP TABLE IF EXISTS likes;
+DROP TABLE IF EXISTS post_images;
+DROP TABLE IF EXISTS comments;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS posts;
+DROP TABLE IF EXISTS images;
+DROP TABLE IF EXISTS users;
+
+SET FOREIGN_KEY_CHECKS = 1;
+
 -- 1. users
 CREATE TABLE users (
     id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     email               VARCHAR(255) NOT NULL UNIQUE,
-    password            VARCHAR(999) NOT NULL,             
+    password            VARCHAR(999) NOT NULL,
     nickname            VARCHAR(255) NOT NULL UNIQUE,
-    profile_image_url   VARCHAR(999) NULL,                
+    profile_image_url   VARCHAR(999) NULL,
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at          TIMESTAMP NULL DEFAULT NULL
@@ -59,7 +81,7 @@ CREATE TABLE images (
     CONSTRAINT fk_images_uploader FOREIGN KEY (uploader_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
--- 5. post_images (게시글-이미지 연결 테이블. 어떤 게시글에 어떤 이미지가 붙는지)
+-- 5. post_images (게시글-이미지 연결 테이블)
 CREATE TABLE post_images (
     id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     post_id     INT UNSIGNED NOT NULL,
@@ -74,12 +96,13 @@ CREATE TABLE post_images (
       ON DELETE CASCADE
 );
 
--- 6. likes (중복 좋아요 방지: 복합 PK, 하드 삭제)
+-- 6. likes (회원: liker_key='u_'+user_id, 비회원: liker_key=anon_id)
 CREATE TABLE likes (
     post_id     INT UNSIGNED NOT NULL,
-    user_id     INT UNSIGNED NOT NULL,
+    liker_key   VARCHAR(255) NOT NULL,
+    user_id     INT UNSIGNED NULL,
     created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (post_id, user_id),
+    PRIMARY KEY (post_id, liker_key),
 
     CONSTRAINT fk_likes_post
       FOREIGN KEY (post_id) REFERENCES posts(id)
@@ -101,8 +124,7 @@ CREATE TABLE sessions (
       ON DELETE CASCADE
 );
 
-
--- 인덱스(권장: 조회/조인 성능)
+-- 인덱스 (조회/조인 성능)
 CREATE INDEX idx_posts_user_id ON posts(user_id);
 CREATE INDEX idx_comments_post_id ON comments(post_id);
 CREATE INDEX idx_comments_author_id ON comments(author_id);

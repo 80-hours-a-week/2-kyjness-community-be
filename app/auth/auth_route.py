@@ -1,7 +1,8 @@
 # app/auth/auth_route.py
+from typing import Optional
+
 from fastapi import APIRouter, Cookie, Depends
 from starlette.responses import JSONResponse
-from typing import Optional
 
 from app.auth.auth_schema import SignUpRequest, LoginRequest
 from app.auth import auth_controller

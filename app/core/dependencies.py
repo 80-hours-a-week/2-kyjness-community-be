@@ -25,6 +25,13 @@ def get_current_user(session_id: Optional[str] = Cookie(None)) -> int:
     return user_id
 
 
+def get_current_user_optional(session_id: Optional[str] = Cookie(None)) -> Optional[int]:
+    """세션 있으면 user_id 반환, 없거나 무효면 None. 비로그인 업로드 허용용."""
+    if not session_id:
+        return None
+    return AuthModel.get_user_id_by_session(session_id)
+
+
 def require_post_author(
     post_id: int = Path(..., description="게시글 ID"),
     current_id: int = Depends(get_current_user),

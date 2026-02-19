@@ -39,17 +39,3 @@ class MediaModel:
                 )
                 row = cur.fetchone()
         return row["file_url"] if row else None
-
-    @classmethod
-    def get_id_by_url(cls, file_url: str) -> Optional[int]:
-        """file_url로 images 테이블의 id 조회. 게시글 수정 시 기존 이미지 유지용."""
-        if not file_url:
-            return None
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id FROM images WHERE file_url = %s LIMIT 1",
-                    (file_url,),
-                )
-                row = cur.fetchone()
-        return row["id"] if row else None

@@ -24,7 +24,7 @@ async def create_comment(
 async def get_comments(
     post_id: int = Path(..., description="게시글 ID"),
     page: int = Query(1, ge=1, description="페이지 번호"),
-    size: int = Query(20, ge=1, le=100, description="페이지 크기 (기본 20, 최대 100)")
+    size: int = Query(10, ge=1, le=100, description="페이지 크기 (기본 10, 최대 100)")
 ):
     """댓글 목록 조회 API"""
     return comments_controller.get_comments(post_id=post_id, page=page, size=size)

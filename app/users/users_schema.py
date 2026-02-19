@@ -4,11 +4,7 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional
 
-from app.core.validators import (
-    ensure_password_format,
-    ensure_nickname_format,
-    ensure_profile_image_url,
-)
+from app.core.validators import ensure_password_format, ensure_nickname_format
 
 
 def _strip_empty_to_none(v):

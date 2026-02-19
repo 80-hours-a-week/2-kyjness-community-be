@@ -28,12 +28,15 @@ def get_connection():
             autocommit=False,
         )
         yield conn
-    finally:
+    except Exception:
         if conn:
             try:
                 conn.rollback()
             except Exception:
                 pass
+        raise
+    finally:
+        if conn:
             try:
                 conn.close()
             except Exception:

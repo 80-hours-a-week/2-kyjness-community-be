@@ -64,15 +64,23 @@ def get_posts(page: int = 1, size: int = 10):
     return {"code": ApiCode.POSTS_RETRIEVED.value, "data": result, "hasMore": has_more}
 
 
-def get_post(post_id: int):
+def record_view(post_id: int) -> None:
+    """조회수 1 증가. 페이지 진입 시 전용. 게시글 없으면 404."""
     post = PostsModel.find_post_by_id(post_id)
     if not post:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
     PostsModel.increment_hits(post_id)
+
+
+def get_post(post_id: int):
+    """게시글 상세 조회. 조회수는 POST /view에서 별도 처리."""
+    post = PostsModel.find_post_by_id(post_id)
+    if not post:
+        raise_http_error(404, ApiCode.POST_NOT_FOUND)
     author = AuthModel.find_user_by_id(post["authorId"])
     if not author:
         raise_http_error(404, ApiCode.USER_NOT_FOUND)
-    post_with_hits = {**post, "hits": post["hits"] + 1}
+    post_with_hits = {**post, "hits": post["hits"]}
     data = _post_to_response_item(post_with_hits, author)
     return success_response(ApiCode.POST_RETRIEVED, data)
 
@@ -97,30 +105,29 @@ def delete_post(post_id: int, user_id: int):
 
 
 def create_like(post_id: int, user_id: int):
-    """게시글 좋아요 추가."""
+    """게시글 좋아요 추가. 로그인 사용자만 가능."""
     post = PostsModel.find_post_by_id(post_id)
     if not post:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
-    if PostLikesModel.has_liked(post_id, user_id):
-        raise_http_error(409, ApiCode.CONFLICT)
-    like = PostLikesModel.create_like(post_id, user_id)
+    liker_key = PostLikesModel._liker_key_user(user_id)
+    if PostLikesModel.has_liked(post_id, liker_key):
+        current = post.get("likeCount", 0) or 0
+        return success_response(ApiCode.ALREADY_LIKED, {"likeCount": current})
+    like = PostLikesModel.create_like(post_id, liker_key, user_id=user_id)
     if not like:
         raise_http_error(409, ApiCode.CONFLICT)
-    PostsModel.increment_like_count(post_id)
-    updated_post = PostsModel.find_post_by_id(post_id)
-    like_count = updated_post["likeCount"] if updated_post else 0
+    like_count = PostsModel.increment_like_count(post_id)
     return success_response(ApiCode.POSTLIKE_UPLOADED, {"likeCount": like_count})
 
 
 def delete_like(post_id: int, user_id: int):
-    """게시글 좋아요 취소. 응답에 likeCount 포함."""
+    """게시글 좋아요 취소. 로그인 사용자만 가능."""
     post = PostsModel.find_post_by_id(post_id)
     if not post:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
-    if not PostLikesModel.has_liked(post_id, user_id):
+    liker_key = PostLikesModel._liker_key_user(user_id)
+    if not PostLikesModel.has_liked(post_id, liker_key):
         raise_http_error(404, ApiCode.LIKE_NOT_FOUND)
-    PostLikesModel.delete_like(post_id, user_id)
-    PostsModel.decrement_like_count(post_id)
-    updated_post = PostsModel.find_post_by_id(post_id)
-    like_count = updated_post["likeCount"] if updated_post else 0
+    PostLikesModel.delete_like(post_id, liker_key)
+    like_count = PostsModel.decrement_like_count(post_id)
     return success_response(ApiCode.LIKE_DELETED, {"likeCount": like_count})

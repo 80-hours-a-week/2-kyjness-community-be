@@ -100,21 +100,6 @@ class AuthModel:
         return cls._row_to_user(row, include_password=True) if row else None
 
     @classmethod
-    def find_user_by_nickname(cls, nickname: str) -> Optional[dict]:
-        """닉네임으로 사용자 찾기"""
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT id, email, nickname, profile_image_url, created_at
-                    FROM users WHERE nickname = %s AND deleted_at IS NULL
-                    """,
-                    (nickname,),
-                )
-                row = cur.fetchone()
-        return cls._row_to_user(row) if row else None
-
-    @classmethod
     def find_user_by_id(cls, user_id: int) -> Optional[dict]:
         """ID로 사용자 찾기 (비밀번호 제외). 내부/기타 용도."""
         with get_connection() as conn:
@@ -223,16 +208,6 @@ class AuthModel:
                 affected = cur.rowcount
             conn.commit()
         return affected > 0
-
-    @classmethod
-    def revoke_all_sessions_for_user(cls, user_id: int) -> int:
-        """해당 사용자의 모든 세션 삭제"""
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM sessions WHERE user_id = %s", (user_id,))
-                count = cur.rowcount
-            conn.commit()
-        return count
 
     @classmethod
     def email_exists(cls, email: str) -> bool:

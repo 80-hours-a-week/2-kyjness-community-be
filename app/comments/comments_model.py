@@ -63,9 +63,9 @@ class CommentsModel:
 
     @classmethod
     def get_comments_by_post_id(
-        cls, post_id: int, page: int = 1, size: int = 20
+        cls, post_id: int, page: int = 1, size: int = 10
     ) -> List[dict]:
-        """특정 게시글의 댓글 목록 (페이징)"""
+        """특정 게시글의 댓글 목록 (페이징, 기본 10개)"""
         offset = (page - 1) * size
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -119,27 +119,3 @@ class CommentsModel:
                 affected = cur.rowcount
             conn.commit()
         return affected > 0
-
-    @classmethod
-    def get_comment_author_id(cls, comment_id: int) -> Optional[int]:
-        """댓글 작성자 ID 조회"""
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT author_id FROM comments WHERE id = %s AND deleted_at IS NULL",
-                    (comment_id,),
-                )
-                row = cur.fetchone()
-        return row["author_id"] if row else None
-
-    @classmethod
-    def get_comment_post_id(cls, comment_id: int) -> Optional[int]:
-        """댓글의 게시글 ID 조회"""
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT post_id FROM comments WHERE id = %s AND deleted_at IS NULL",
-                    (comment_id,),
-                )
-                row = cur.fetchone()
-        return row["post_id"] if row else None

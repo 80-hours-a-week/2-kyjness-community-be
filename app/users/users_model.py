@@ -39,6 +39,15 @@ class UsersModel:
         return AuthModel.update_user_profile_image_url(user_id, profile_image_url)
 
     @classmethod
+    def soft_delete_old_profile_image(cls, user_id: int) -> None:
+        """프로필 변경 전 이전 프로필 이미지를 images 테이블에서 soft delete."""
+        user = AuthModel.get_user_by_id(user_id)
+        if not user or not user.get("profileImageUrl"):
+            return
+        from app.media.media_model import MediaModel
+        MediaModel.soft_delete_by_url(user["profileImageUrl"])
+
+    @classmethod
     def resolve_image_url(cls, image_id: int) -> Optional[str]:
         """images 테이블에서 image_id로 URL 조회 (프로필/게시글 연결용)."""
         from app.media.media_model import MediaModel

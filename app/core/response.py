@@ -9,21 +9,24 @@ from pydantic import BaseModel, ConfigDict
 from app.core.codes import ApiCode
 
 
-def _to_code(value: Union[str, ApiCode]) -> str:
+def _to_code_string(value: Union[str, ApiCode]) -> str:
+    """ApiCode 또는 str을 응답용 code 문자열로 변환."""
     return value.value if isinstance(value, ApiCode) else value
 
 
 def success_response(code: Union[str, ApiCode], data=None) -> dict:
     """성공 응답 dict. Route에서 그대로 반환."""
-    return {"code": _to_code(code), "data": data}
+    return {"code": _to_code_string(code), "data": data}
 
 
-def raise_http_error(status_code: int, error_code: Union[str, ApiCode]) -> None:
-    """HTTPException 발생 (detail 포맷 통일). 전역 exception_handler가 그대로 반환."""
-    raise HTTPException(
-        status_code=status_code,
-        detail={"code": _to_code(error_code), "data": None},
-    )
+def raise_http_error(
+    status_code: int, error_code: Union[str, ApiCode], message: Optional[str] = None
+) -> None:
+    """HTTPException 발생 (detail 포맷 통일). message가 있으면 응답에 포함됨."""
+    detail: dict = {"code": _to_code_string(error_code), "data": None}
+    if message is not None:
+        detail["message"] = message
+    raise HTTPException(status_code=status_code, detail=detail)
 
 
 class ApiResponse(BaseModel):

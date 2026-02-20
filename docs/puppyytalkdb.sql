@@ -77,6 +77,7 @@ CREATE TABLE images (
     size            INT UNSIGNED NULL,
     uploader_id     INT UNSIGNED NULL COMMENT '업로더(비회원 가입 전이면 NULL)',
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at      TIMESTAMP NULL DEFAULT NULL,
 
     CONSTRAINT fk_images_uploader FOREIGN KEY (uploader_id) REFERENCES users(id) ON DELETE SET NULL
 );

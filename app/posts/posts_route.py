@@ -1,5 +1,4 @@
 # app/posts/posts_route.py
-import logging
 
 from fastapi import APIRouter, Depends, Path, Query
 from fastapi.responses import Response
@@ -11,7 +10,6 @@ from app.core.dependencies import get_current_user, require_post_author
 from app.core.response import ApiResponse
 
 router = APIRouter(prefix="/posts", tags=["posts"])
-logger = logging.getLogger(__name__)
 
 
 @router.post("", status_code=201, response_model=ApiResponse)
@@ -20,7 +18,6 @@ async def create_post(
     user_id: int = Depends(get_current_user),
 ):
     """게시글 작성. 이미지는 POST /v1/media/images 로 업로드 후 imageIds 전달 (최대 5개)."""
-    logger.debug("create_post 요청 도달 user_id=%s title_len=%s imageIds=%s", user_id, len(post_data.title or ""), post_data.imageIds)
     return posts_controller.create_post(user_id=user_id, data=post_data)
 
 

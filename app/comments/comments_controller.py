@@ -3,6 +3,8 @@
 
 import logging
 
+from fastapi import HTTPException
+
 from app.comments.comments_model import CommentsModel
 from app.comments.comments_schema import CommentCreateRequest, CommentUpdateRequest, CommentResponse, CommentAuthorInfo
 from app.posts.posts_model import PostsModel
@@ -19,6 +21,8 @@ def create_comment(post_id: int, user_id: int, data: CommentCreateRequest):
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
     try:
         comment = CommentsModel.create_comment(post_id, user_id, data.content)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("댓글 저장 실패 post_id=%s user_id=%s: %s", post_id, user_id, e)
         raise

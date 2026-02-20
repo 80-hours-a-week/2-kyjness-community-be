@@ -9,7 +9,7 @@ import pymysql
 
 from app.core.database import get_connection
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)  # exception 로그용
 
 
 class PostsModel:
@@ -61,7 +61,6 @@ class PostsModel:
                     (user_id, title, content),
                 )
                 post_id = cur.lastrowid
-                logger.debug("게시글 INSERT posts ok post_id=%s user_id=%s", post_id, user_id)
                 for iid in image_ids[: cls.MAX_POST_IMAGES]:
                     cur.execute(
                         "INSERT INTO post_images (post_id, image_id) VALUES (%s, %s)",
@@ -74,7 +73,7 @@ class PostsModel:
                         """
                         SELECT pi.id, i.file_url, i.id AS image_id
                         FROM post_images pi
-                        INNER JOIN images i ON pi.image_id = i.id
+                        INNER JOIN images i ON pi.image_id = i.id AND i.deleted_at IS NULL
                         WHERE pi.post_id = %s ORDER BY pi.id
                         """,
                         (post_id,),
@@ -92,7 +91,6 @@ class PostsModel:
                     else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 )
             conn.commit()
-            logger.debug("게시글 commit ok post_id=%s (DB 반영 완료)", post_id)
 
         files = [
             {"fileId": fr["id"], "fileUrl": fr["file_url"] or "", "imageId": fr["image_id"]}
@@ -130,7 +128,7 @@ class PostsModel:
                     """
                     SELECT pi.id, i.file_url, i.id AS image_id
                     FROM post_images pi
-                    INNER JOIN images i ON pi.image_id = i.id
+                    INNER JOIN images i ON pi.image_id = i.id AND i.deleted_at IS NULL
                     WHERE pi.post_id = %s
                     ORDER BY pi.id
                     """,
@@ -168,7 +166,7 @@ class PostsModel:
                     f"""
                     SELECT pi.post_id, pi.id, i.file_url, i.id AS image_id
                     FROM post_images pi
-                    INNER JOIN images i ON pi.image_id = i.id
+                    INNER JOIN images i ON pi.image_id = i.id AND i.deleted_at IS NULL
                     WHERE pi.post_id IN ({placeholders})
                     ORDER BY pi.post_id, pi.id
                     """,
@@ -208,20 +206,71 @@ class PostsModel:
                         (content, post_id),
                     )
                 if image_ids is not None:
+                    cur.execute(
+                        "SELECT image_id FROM post_images WHERE post_id = %s",
+                        (post_id,),
+                    )
+                    old_image_ids = {r["image_id"] for r in cur.fetchall()}
+                    new_image_ids_set = set(image_ids[: cls.MAX_POST_IMAGES])
+                    removed_ids = old_image_ids - new_image_ids_set
+
                     cur.execute("DELETE FROM post_images WHERE post_id = %s", (post_id,))
                     for iid in image_ids[: cls.MAX_POST_IMAGES]:
                         cur.execute(
                             "INSERT INTO post_images (post_id, image_id) VALUES (%s, %s)",
                             (post_id, iid),
                         )
+
+                    for img_id in removed_ids:
+                        cur.execute(
+                            "SELECT 1 FROM post_images WHERE image_id = %s LIMIT 1",
+                            (img_id,),
+                        )
+                        if cur.fetchone() is None:
+                            cur.execute(
+                                "UPDATE images SET deleted_at = NOW() WHERE id = %s AND deleted_at IS NULL",
+                                (img_id,),
+                            )
             conn.commit()
         return True
 
     @classmethod
     def delete_post(cls, post_id: int) -> bool:
-        """게시글 삭제 (soft delete)"""
+        """게시글 삭제 (soft delete) + 연관 데이터 처리
+        - posts: soft delete (deleted_at)
+        - comments: soft delete (deleted_at)
+        - likes: hard delete
+        - post_images: hard delete
+        - images: post_images에서 참조 해제된 이미지는 soft delete
+        """
         with get_connection() as conn:
             with conn.cursor() as cur:
+                # 1. 댓글 soft delete
+                cur.execute(
+                    "UPDATE comments SET deleted_at = NOW() WHERE post_id = %s AND deleted_at IS NULL",
+                    (post_id,),
+                )
+                # 2. 좋아요 hard delete
+                cur.execute("DELETE FROM likes WHERE post_id = %s", (post_id,))
+                # 3. post_images에서 해당 게시글의 image_id 목록 수집 후 삭제
+                cur.execute(
+                    "SELECT image_id FROM post_images WHERE post_id = %s",
+                    (post_id,),
+                )
+                image_ids = [r["image_id"] for r in cur.fetchall()]
+                cur.execute("DELETE FROM post_images WHERE post_id = %s", (post_id,))
+                # 4. 다른 게시글에서 참조하지 않는 이미지 soft delete
+                for img_id in image_ids:
+                    cur.execute(
+                        "SELECT 1 FROM post_images WHERE image_id = %s LIMIT 1",
+                        (img_id,),
+                    )
+                    if cur.fetchone() is None:
+                        cur.execute(
+                            "UPDATE images SET deleted_at = NOW() WHERE id = %s AND deleted_at IS NULL",
+                            (img_id,),
+                        )
+                # 5. 게시글 soft delete
                 cur.execute(
                     "UPDATE posts SET deleted_at = NOW() WHERE id = %s",
                     (post_id,),

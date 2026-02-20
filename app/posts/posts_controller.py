@@ -4,7 +4,7 @@
 import logging
 from typing import Optional, List
 
-logger = logging.getLogger(__name__)
+from fastapi import HTTPException
 
 from app.posts.posts_model import PostsModel, PostLikesModel
 from app.posts.posts_schema import PostCreateRequest, PostUpdateRequest, PostResponse, AuthorInfo, FileInfo
@@ -12,6 +12,8 @@ from app.auth.auth_model import AuthModel
 from app.core.codes import ApiCode
 from app.core.response import success_response, raise_http_error
 from app.media.media_model import MediaModel
+
+logger = logging.getLogger(__name__)
 
 
 def _validate_image_ids(image_ids: Optional[List[int]]) -> None:
@@ -28,13 +30,15 @@ def create_post(user_id: int, data: PostCreateRequest):
         _validate_image_ids(data.imageIds)
         post = PostsModel.create_post(user_id, data.title, data.content, data.imageIds)
         return success_response(ApiCode.POST_UPLOADED, {"postId": post["postId"]})
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("게시글 작성 실패 user_id=%s: %s", user_id, e)
         raise
 
 
-def _post_to_response_item(post: dict, author: dict) -> dict:
-    """단일 게시글 dict를 PostResponse 스키마로 검증 후 반환."""
+def _build_post_response_item(post: dict, author: dict) -> dict:
+    """단일 게시글 + 작성자 정보를 API 응답 형식으로 구성."""
     item = PostResponse(
         postId=post["postId"],
         title=post["title"],
@@ -60,7 +64,7 @@ def get_posts(page: int = 1, size: int = 10):
     for post in posts_raw:
         author = AuthModel.find_user_by_id(post["authorId"])
         if author:
-            result.append(_post_to_response_item(post, author))
+            result.append(_build_post_response_item(post, author))
     return {"code": ApiCode.POSTS_RETRIEVED.value, "data": result, "hasMore": has_more}
 
 
@@ -80,8 +84,7 @@ def get_post(post_id: int):
     author = AuthModel.find_user_by_id(post["authorId"])
     if not author:
         raise_http_error(404, ApiCode.USER_NOT_FOUND)
-    post_with_hits = {**post, "hits": post["hits"]}
-    data = _post_to_response_item(post_with_hits, author)
+    data = _build_post_response_item(post, author)
     return success_response(ApiCode.POST_RETRIEVED, data)
 
 

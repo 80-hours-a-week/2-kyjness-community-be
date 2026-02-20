@@ -18,8 +18,8 @@ def check_availability(query) -> dict:
     return success_response(ApiCode.OK, data)
 
 
-def get_user(user_id: int):
-    """내 프로필 리소스 조회. createdAt 포함. /users/me 전용."""
+def get_user_profile(user_id: int):
+    """내 프로필 조회. createdAt 포함. GET /users/me 전용."""
     user = UsersModel.get_user_by_id(user_id)
     if not user:
         raise_http_error(404, ApiCode.USER_NOT_FOUND)
@@ -42,6 +42,7 @@ def update_user(user_id: int, data: UpdateUserRequest):
         profile_image_url = UsersModel.resolve_image_url(data.profileImageId)
         if profile_image_url is None:
             raise_http_error(400, ApiCode.INVALID_REQUEST)
+        UsersModel.soft_delete_old_profile_image(user_id)
         if not UsersModel.update_profile_image_url(user_id, profile_image_url):
             raise_http_error(500, ApiCode.INTERNAL_SERVER_ERROR)
     return success_response(ApiCode.USER_UPDATED)

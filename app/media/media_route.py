@@ -1,15 +1,24 @@
 # app/media/media_route.py
-"""공통 이미지 업로드. 회원가입 전/프로필/게시글 모두 POST /v1/media/images 사용."""
+"""공통 이미지 업로드/삭제. POST /v1/media/images, DELETE /images/:id soft delete."""
 
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, File, UploadFile, Query
+from fastapi import APIRouter, Depends, File, Path, UploadFile, Query
 
 from app.media import media_controller
-from app.core.dependencies import get_current_user_optional
+from app.core.dependencies import get_current_user, get_current_user_optional
 from app.core.response import ApiResponse
 
 router = APIRouter(prefix="/media", tags=["media"])
+
+
+@router.delete("/images/{image_id}", status_code=204)
+async def delete_image(
+    image_id: int = Path(..., description="삭제할 이미지 ID"),
+    user_id: int = Depends(get_current_user),
+):
+    """이미지 삭제 (soft delete: deleted_at 설정). 업로더 본인만 삭제 가능."""
+    media_controller.delete_image(image_id=image_id, user_id=user_id)
 
 
 @router.post("/images", status_code=201, response_model=ApiResponse)

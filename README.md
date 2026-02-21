@@ -14,7 +14,7 @@
 | **인증 (Auth)** | 회원가입(프로필 이미지 업로드·등록 가능), 로그인, 로그아웃. 로그인 시 쿠키에 세션 저장, 이후 요청에 쿠키 포함. 비밀번호는 bcrypt 암호화. 로그인 API 전용 rate limit(IP당 분당 5회) |
 | **사용자 (Users)** | 프로필 조회·수정, 비밀번호 변경, 프로필 사진 업로드. `/users/me` 경로 |
 | **게시글 (Posts)** | 작성·조회·수정·삭제, 이미지 최대 5장 첨부, 좋아요 추가·취소. 목록은 무한 스크롤 조회 (응답에 `hasMore`) |
-| **댓글 (Comments)** | 게시글별 댓글 작성·조회·수정·삭제. 목록은 20개 단위 페이징 (응답에 `totalCount`, `totalPages`, `currentPage`) |
+| **댓글 (Comments)** | 게시글별 댓글 작성·조회·수정·삭제. 목록은 페이지당 기본 10개 (size 쿼리로 변경 가능, 응답에 `totalCount`, `totalPages`, `currentPage`) |
 
 ### 기술 스택
 
@@ -65,7 +65,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  media │  /v1/media/...     (이미지 업로드 — 회원가입·프로필·게시글 공통)   │
 ├────────┼────────────────────────────────────────────────────────────────┤
-│  POST  │  /images            이미지 1건 업로드 → imageId, url 반환        │
+│  POST  │  /images            이미지 1건 업로드 (쿼리: type=profile|post) → imageId, url 반환 │
 └────────┴────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -92,7 +92,8 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ├────────┼────────────────────────────────────────────────────────────────┤
 │  POST  │  /                   게시글 작성 (imageIds는 미리 /media/images 업로드, 최대 5개) │
 │  GET   │  /                   게시글 목록 (무한 스크롤, hasMore)          │
-│  GET   │  /{post_id}          게시글 상세                                 │
+│  POST  │  /{post_id}/view     조회수 1 증가 (상세 페이지 진입 시 호출, 204 No Content) │
+│  GET   │  /{post_id}          게시글 상세 (조회수 증가 없음)              │
 │  PATCH │  /{post_id}          게시글 수정 (imageIds 최대 5개)             │
 │  DELETE│  /{post_id}          게시글 삭제                                 │
 │  POST  │  /{post_id}/likes    좋아요 추가                                 │
@@ -103,7 +104,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 │comments│  /v1/posts/{post_id}/comments/...                               │
 ├────────┼────────────────────────────────────────────────────────────────┤
 │  POST  │  /                   댓글 작성                                 │
-│  GET   │  /                   댓글 목록 (페이징, totalCount·totalPages) │
+│  GET   │  /                   댓글 목록 (페이징, 기본 10개, totalCount·totalPages·currentPage) │
 │  PATCH │  /{comment_id}       댓글 수정                                 │
 │  DELETE│  /{comment_id}       댓글 삭제                                 │
 └────────┴────────────────────────────────────────────────────────────────┘
@@ -155,13 +156,14 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 │   │   └── posts_schema.py        # 요청 형식 정의
 │   │
 │   ├── comments/                  # 댓글
-│   │   ├── comments_route.py      # 댓글 CRUD API (20개 단위 페이징)
+│   │   ├── comments_route.py      # 댓글 CRUD API (페이지당 기본 10개, size 쿼리 지원)
 │   │   ├── comments_controller.py # 댓글 비즈니스 로직
 │   │   ├── comments_model.py      # 댓글 DB 접근
 │   │   └── comments_schema.py     # 요청 형식 정의
 │   │
 ├── docs/                          # 문서
-│   └── puppyytalkdb.sql           # 테이블 생성 스크립트
+│   ├── puppyytalkdb.sql           # 테이블 생성 스크립트
+│   └── clear_db.sql               # 데이터만 비우기 (테이블 구조 유지)
 │
 ├── main.py                        # 앱 진입점
 ├── upload/                        # 업로드 파일 저장 (로컬 시, StaticFiles 마운트)
@@ -197,7 +199,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 │                                                                      │
 │  ④ 의존성 (Depends)                                                   │
 │     → get_current_user: Cookie의 session_id → 세션 조회 → user_id 반환│
-│     → require_post_author: 게시글 수정/삭제 시 작성자 본인인지 확인    │
+│     → require_post_author / require_comment_author: 게시글·댓글 수정/삭제 시 작성자 본인 여부 확인 │
 │                                                                      │
 │  ⑤ Pydantic (Schema)                                                  │
 │     → 요청 body를 DTO(PostCreateRequest 등)로 검증. 실패 시 400 + code │
@@ -234,7 +236,7 @@ mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS puppytalk;"
 mysql -u root -p puppytalk < docs/puppyytalkdb.sql
 ```
 
-DDL은 `docs/puppyytalkdb.sql`을 참고합니다.
+DDL은 `docs/puppyytalkdb.sql`을 참고합니다. **데이터만 비우기**(테이블 구조 유지)가 필요하면 `docs/clear_db.sql`을 실행하면 됩니다.
 
 ### 2. 가상환경 및 패키지
 

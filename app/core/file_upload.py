@@ -65,15 +65,6 @@ async def _validate_image(
     return content
 
 
-async def validate_image_upload(
-    file: Optional[UploadFile],
-    allowed_types: List[str],
-    max_size: int = MAX_FILE_SIZE,
-) -> bytes:
-    """이미지 검증만 수행. 저장까지 필요하면 save_image_for_media 사용 (media_controller 경유)."""
-    return await _validate_image(file, allowed_types, max_size)
-
-
 def _safe_extension(filename: Optional[str], content_type: str) -> str:
     """파일명에서 확장자 추출. 없거나 비정상이면 content_type 기준으로 반환."""
     if filename and "." in filename:

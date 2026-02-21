@@ -1,6 +1,8 @@
 # app/posts/posts_route.py
-from fastapi import APIRouter, Query, Depends, Path
+
+from fastapi import APIRouter, Depends, Path, Query
 from fastapi.responses import Response
+from starlette.responses import JSONResponse
 
 from app.posts.posts_schema import PostCreateRequest, PostUpdateRequest
 from app.posts import posts_controller
@@ -28,9 +30,16 @@ async def get_posts(
     return posts_controller.get_posts(page=page, size=size)
 
 
+@router.post("/{post_id}/view", status_code=204)
+async def record_post_view(post_id: int = Path(..., description="게시글 ID")):
+    """조회수 1 증가. 페이지 진입 시에만 호출. 댓글/수정 후 재조회 시엔 호출하지 않음."""
+    posts_controller.record_view(post_id)
+    return Response(status_code=204)
+
+
 @router.get("/{post_id}", status_code=200, response_model=ApiResponse)
 async def get_post(post_id: int = Path(..., description="게시글 ID")):
-    """게시글 상세 조회."""
+    """게시글 상세 조회 (조회수 증가 없음). 페이지 진입 시엔 먼저 POST /view 호출."""
     return posts_controller.get_post(post_id=post_id)
 
 
@@ -56,19 +65,22 @@ async def delete_post(
     return Response(status_code=204)
 
 
-@router.post("/{post_id}/likes", status_code=201, response_model=ApiResponse)
+@router.post("/{post_id}/likes", status_code=201)
 async def create_like(
     post_id: int = Path(..., description="게시글 ID"),
     user_id: int = Depends(get_current_user),
 ):
-    """좋아요 추가."""
-    return posts_controller.create_like(post_id=post_id, user_id=user_id)
+    """좋아요 추가. 로그인 사용자만 가능."""
+    result = posts_controller.create_like(post_id=post_id, user_id=user_id)
+    if result.get("code") == "ALREADY_LIKED":
+        return JSONResponse(content=result, status_code=200)
+    return result
 
 
-@router.delete("/{post_id}/likes", status_code=200, response_model=ApiResponse)
+@router.delete("/{post_id}/likes", status_code=200)
 async def delete_like(
     post_id: int = Path(..., description="게시글 ID"),
     user_id: int = Depends(get_current_user),
 ):
-    """좋아요 취소. 응답에 likeCount 포함."""
+    """좋아요 취소. 로그인 사용자만 가능."""
     return posts_controller.delete_like(post_id=post_id, user_id=user_id)

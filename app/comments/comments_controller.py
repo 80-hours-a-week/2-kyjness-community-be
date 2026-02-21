@@ -3,10 +3,12 @@
 
 import logging
 
+from fastapi import HTTPException
+
 from app.comments.comments_model import CommentsModel
 from app.comments.comments_schema import CommentCreateRequest, CommentUpdateRequest, CommentResponse, CommentAuthorInfo
 from app.posts.posts_model import PostsModel
-from app.auth.auth_model import AuthModel
+from app.users.users_model import UsersModel
 from app.core.codes import ApiCode
 from app.core.response import success_response, raise_http_error
 
@@ -19,6 +21,8 @@ def create_comment(post_id: int, user_id: int, data: CommentCreateRequest):
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
     try:
         comment = CommentsModel.create_comment(post_id, user_id, data.content)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("댓글 저장 실패 post_id=%s user_id=%s: %s", post_id, user_id, e)
         raise
@@ -26,8 +30,8 @@ def create_comment(post_id: int, user_id: int, data: CommentCreateRequest):
     return success_response(ApiCode.COMMENT_UPLOADED, {"commentId": comment["commentId"]})
 
 
-def get_comments(post_id: int, page: int = 1, size: int = 20):
-    """댓글 목록 조회 (20개 단위 페이지네이션). totalCount, totalPages, currentPage 반환."""
+def get_comments(post_id: int, page: int = 1, size: int = 10):
+    """댓글 목록 조회 (10개 단위 페이지네이션). totalCount, totalPages, currentPage 반환."""
     post = PostsModel.find_post_by_id(post_id)
     if not post:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
@@ -37,7 +41,7 @@ def get_comments(post_id: int, page: int = 1, size: int = 20):
 
     result = []
     for comment in comments:
-        author = AuthModel.find_user_by_id(comment["authorId"])
+        author = UsersModel.find_user_by_id(comment["authorId"])
         if author:
             item = CommentResponse(
                 commentId=comment["commentId"],
@@ -61,28 +65,12 @@ def get_comments(post_id: int, page: int = 1, size: int = 20):
 
 
 def update_comment(post_id: int, comment_id: int, user_id: int, data: CommentUpdateRequest):
-    """댓글 수정. 게시글/댓글 존재·작성자 검사는 Route(require_comment_author)에서 수행."""
-    post = PostsModel.find_post_by_id(post_id)
-    if not post:
-        raise_http_error(404, ApiCode.POST_NOT_FOUND)
-    comment = CommentsModel.find_comment_by_id(comment_id)
-    if not comment:
-        raise_http_error(404, ApiCode.COMMENT_NOT_FOUND)
-    if comment["postId"] != post_id:
-        raise_http_error(400, ApiCode.INVALID_POSTID_FORMAT)
+    """댓글 수정. 게시글/댓글 존재·작성자 검사는 Route(require_comment_author)에서 이미 수행됨."""
     CommentsModel.update_comment(comment_id, data.content)
     return success_response(ApiCode.COMMENT_UPDATED)
 
 
 def delete_comment(post_id: int, comment_id: int, user_id: int):
-    """댓글 삭제. 게시글/댓글 존재·작성자 검사는 Route(require_comment_author)에서 수행. 성공 시 반환 없음(route에서 204 반환)."""
-    post = PostsModel.find_post_by_id(post_id)
-    if not post:
-        raise_http_error(404, ApiCode.POST_NOT_FOUND)
-    comment = CommentsModel.find_comment_by_id(comment_id)
-    if not comment:
-        raise_http_error(404, ApiCode.COMMENT_NOT_FOUND)
-    if comment["postId"] != post_id:
-        raise_http_error(400, ApiCode.INVALID_POSTID_FORMAT)
+    """댓글 삭제. 게시글/댓글 존재·작성자 검사는 Route(require_comment_author)에서 이미 수행됨."""
     CommentsModel.delete_comment(comment_id)
     PostsModel.decrement_comment_count(post_id)

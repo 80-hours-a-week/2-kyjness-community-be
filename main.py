@@ -50,24 +50,25 @@ _access_logger = logging.getLogger("app.access")
 
 
 async def access_log_middleware(request: Request, call_next):
-    """모든 HTTP 요청에 대해 Method, Path, Status, 소요 시간(ms) 로깅."""
+    """4xx/5xx 응답만 로깅. DEBUG 시 X-Process-Time 헤더 추가."""
     start = time.perf_counter()
     response = await call_next(request)
     duration_ms = (time.perf_counter() - start) * 1000
     if settings.DEBUG:
         response.headers["X-Process-Time"] = f"{duration_ms:.2f}"
-    client = request.client.host if request.client else "-"
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        client = forwarded.split(",")[0].strip()
-    _access_logger.info(
-        "%s %s %s %.2fms %s",
-        request.method,
-        request.url.path,
-        response.status_code,
-        duration_ms,
-        client,
-    )
+    if response.status_code >= 400:
+        client = request.client.host if request.client else "-"
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            client = forwarded.split(",")[0].strip()
+        _access_logger.info(
+            "%s %s %s %.2fms %s",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+            client,
+        )
     return response
 
 
@@ -83,9 +84,7 @@ def _run_session_cleanup():
     """만료된 세션 삭제. 동기 함수라 스레드에서 호출."""
     try:
         from app.auth.auth_model import AuthModel
-        n = AuthModel.cleanup_expired_sessions()
-        if n and n > 0:
-            logging.getLogger(__name__).info("Session cleanup: removed %d expired session(s)", n)
+        AuthModel.cleanup_expired_sessions()
     except Exception as e:
         logging.getLogger(__name__).warning("Session cleanup failed: %s", e)
 

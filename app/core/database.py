@@ -28,12 +28,15 @@ def get_connection():
             autocommit=False,
         )
         yield conn
-    finally:
+    except Exception:
         if conn:
             try:
                 conn.rollback()
             except Exception:
                 pass
+        raise
+    finally:
+        if conn:
             try:
                 conn.close()
             except Exception:
@@ -41,12 +44,11 @@ def get_connection():
 
 
 def init_database() -> bool:
-    """서버 시작 시 DB 연결 체크. SELECT 1 실행 후 로그 1회 출력."""
+    """서버 시작 시 DB 연결 체크. SELECT 1 실행."""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
-        logger.info("MySQL 연결 성공 (%s)", settings.DB_NAME)
         return True
     except Exception as e:
         logger.error("MySQL 연결 실패: %s", e)

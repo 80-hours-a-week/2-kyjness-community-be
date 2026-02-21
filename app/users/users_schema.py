@@ -4,11 +4,7 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional
 
-from app.core.validators import (
-    ensure_password_format,
-    ensure_nickname_format,
-    ensure_profile_image_url,
-)
+from app.core.validators import ensure_password_format, ensure_nickname_format
 
 
 def _strip_empty_to_none(v):
@@ -21,7 +17,7 @@ def _strip_empty_to_none(v):
 
 
 # --- GET /v1/users/availability (이메일·닉네임 가용 여부) Query DTO ---
-class AvailabilityQuery(BaseModel):
+class UserAvailabilityQuery(BaseModel):
     """email, nickname 중 최소 하나는 비어 있지 않아야 함. 닉네임 형식은 ensure_*로 검증."""
     email: Optional[str] = None
     nickname: Optional[str] = None
@@ -82,8 +78,8 @@ class UpdatePasswordRequest(BaseModel):
     def new_password_format(cls, v: str) -> str:
         return ensure_password_format(v)
 
-# 내 정보 조회 응답 데이터 (data 필드용)
-class UserRetrievedData(BaseModel):
+# 내 프로필 조회 응답 (GET /users/me data 필드용)
+class UserProfileResponse(BaseModel):
     userId: int
     email: str
     nickname: str

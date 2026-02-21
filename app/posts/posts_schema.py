@@ -11,7 +11,7 @@ class PostCreateRequest(BaseModel):
 
     @field_validator("imageIds")
     @classmethod
-    def image_ids_max_five(cls, v: Optional[List[int]]) -> Optional[List[int]]:
+    def image_ids_max_five_create(cls, v: Optional[List[int]]) -> Optional[List[int]]:
         if v is not None and len(v) > 5:
             raise ValueError("POST_FILE_LIMIT_EXCEEDED")
         return v
@@ -25,7 +25,7 @@ class PostUpdateRequest(BaseModel):
 
     @field_validator("imageIds")
     @classmethod
-    def image_ids_max_five(cls, v: Optional[List[int]]) -> Optional[List[int]]:
+    def image_ids_max_five_update(cls, v: Optional[List[int]]) -> Optional[List[int]]:
         if v is not None and len(v) > 5:
             raise ValueError("POST_FILE_LIMIT_EXCEEDED")
         return v

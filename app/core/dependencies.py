@@ -1,7 +1,6 @@
 # app/core/dependencies.py
 """인증·권한 공통 로직 (Route에서 Depends로 사용). Path 파라미터는 의존성에서 명시적으로 선언."""
 
-import logging
 from typing import Optional
 
 from fastapi import Cookie, Depends, Path
@@ -10,19 +9,22 @@ from app.auth.auth_model import AuthModel
 from app.core.codes import ApiCode
 from app.core.response import raise_http_error
 
-logger = logging.getLogger(__name__)
-
 
 def get_current_user(session_id: Optional[str] = Cookie(None)) -> int:
     """Cookie의 session_id로 세션 저장소에서 user_id 조회. 없거나 무효면 401 (JWT 아님)."""
     if not session_id:
-        logger.warning("Authentication failed: No session ID provided")
         raise_http_error(401, ApiCode.UNAUTHORIZED)
     user_id = AuthModel.get_user_id_by_session(session_id)
     if not user_id:
-        logger.warning("Authentication failed: Invalid or expired session")
         raise_http_error(401, ApiCode.UNAUTHORIZED)
     return user_id
+
+
+def get_current_user_optional(session_id: Optional[str] = Cookie(None)) -> Optional[int]:
+    """세션 있으면 user_id 반환, 없거나 무효면 None. 비로그인 업로드 허용용."""
+    if not session_id:
+        return None
+    return AuthModel.get_user_id_by_session(session_id)
 
 
 def require_post_author(

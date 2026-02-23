@@ -1,272 +1,151 @@
 # app/posts/model.py
 
 import logging
-from typing import Any, Optional, List
+from typing import List, Optional
 
-import pymysql
-
-from app.core.database import get_connection
+from sqlalchemy import text, bindparam
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
 
 class PostsModel:
-
     MAX_POST_IMAGES = 5
 
     @classmethod
-    def create_post(cls, user_id: int, title: str, content: str, image_ids: Optional[List[int]] = None) -> int:
-        """반환: 새 post id."""
+    def create_post(cls, user_id: int, title: str, content: str, image_ids: Optional[List[int]] = None, *, db: Session) -> int:
         image_ids = image_ids or []
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO posts (user_id, title, content) VALUES (%s, %s, %s)",
-                    (user_id, title, content),
-                )
-                post_id = cur.lastrowid
-                for iid in image_ids[: cls.MAX_POST_IMAGES]:
-                    cur.execute(
-                        "INSERT INTO post_images (post_id, image_id) VALUES (%s, %s)",
-                        (post_id, iid),
-                    )
-            conn.commit()
+        db.execute(
+            text("INSERT INTO posts (user_id, title, content) VALUES (:uid, :title, :content)"),
+            {"uid": user_id, "title": title, "content": content},
+        )
+        post_id = db.execute(text("SELECT LAST_INSERT_ID()")).scalar()
+        for iid in image_ids[: cls.MAX_POST_IMAGES]:
+            db.execute(text("INSERT INTO post_images (post_id, image_id) VALUES (:pid, :iid)"), {"pid": post_id, "iid": iid})
         return post_id
 
     @classmethod
-    def find_post_by_id(cls, post_id: int) -> Optional[tuple[dict, List[dict]]]:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT id, user_id, title, content, view_count, like_count, comment_count, created_at
-                    FROM posts WHERE id = %s AND deleted_at IS NULL
-                    """,
-                    (post_id,),
-                )
-                row = cur.fetchone()
-                if not row:
-                    return None
-                cur.execute(
-                    """
-                    SELECT pi.id, i.file_url, i.id AS image_id
-                    FROM post_images pi
-                    INNER JOIN images i ON pi.image_id = i.id AND i.deleted_at IS NULL
-                    WHERE pi.post_id = %s ORDER BY pi.id
-                    """,
-                    (post_id,),
-                )
-                file_rows = cur.fetchall()
-        return (row, file_rows or [])
+    def find_post_by_id(cls, post_id: int, db: Session) -> Optional[tuple[dict, List[dict]]]:
+        row = db.execute(
+            text("SELECT id, user_id, title, content, view_count, like_count, comment_count, created_at FROM posts WHERE id = :pid AND deleted_at IS NULL"),
+            {"pid": post_id},
+        ).mappings().fetchone()
+        if not row:
+            return None
+        file_rows = db.execute(
+            text("SELECT pi.id, i.file_url, i.id AS image_id FROM post_images pi INNER JOIN images i ON pi.image_id = i.id AND i.deleted_at IS NULL WHERE pi.post_id = :pid ORDER BY pi.id"),
+            {"pid": post_id},
+        ).mappings().fetchall()
+        return (dict(row), [dict(r) for r in file_rows] if file_rows else [])
 
     @classmethod
-    def get_all_posts(cls, page: int = 1, size: int = 20) -> tuple[List[tuple[dict, List[dict]]], bool]:
+    def get_all_posts(cls, page: int = 1, size: int = 20, *, db: Session) -> tuple[List[tuple[dict, List[dict]]], bool]:
         offset = (page - 1) * size
         fetch_limit = size + 1
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT id, user_id, title, content, view_count, like_count, comment_count, created_at
-                    FROM posts WHERE deleted_at IS NULL
-                    ORDER BY id DESC LIMIT %s OFFSET %s
-                    """,
-                    (fetch_limit, offset),
-                )
-                rows = cur.fetchall()
-                has_more = len(rows) > size
-                rows = rows[:size]
-                if not rows:
-                    return [], has_more
-                post_ids = [r["id"] for r in rows]
-                placeholders = ", ".join(["%s"] * len(post_ids))
-                cur.execute(
-                    f"""
-                    SELECT pi.post_id, pi.id, i.file_url, i.id AS image_id
-                    FROM post_images pi
-                    INNER JOIN images i ON pi.image_id = i.id AND i.deleted_at IS NULL
-                    WHERE pi.post_id IN ({placeholders})
-                    ORDER BY pi.post_id, pi.id
-                    """,
-                    tuple(post_ids),
-                )
-                all_file_rows = cur.fetchall()
-                files_by_post: dict[int, list] = {pid: [] for pid in post_ids}
-                for fr in all_file_rows:
-                    files_by_post[fr["post_id"]].append(fr)
-                result = [(row, files_by_post.get(row["id"]) or []) for row in rows]
+        rows = db.execute(
+            text("SELECT id, user_id, title, content, view_count, like_count, comment_count, created_at FROM posts WHERE deleted_at IS NULL ORDER BY id DESC LIMIT :lim OFFSET :off"),
+            {"lim": fetch_limit, "off": offset},
+        ).mappings().fetchall()
+        has_more = len(rows) > size
+        rows = rows[:size]
+        if not rows:
+            return [], has_more
+        post_ids = [r["id"] for r in rows]
+        stmt = text("SELECT pi.post_id, pi.id, i.file_url, i.id AS image_id FROM post_images pi INNER JOIN images i ON pi.image_id = i.id AND i.deleted_at IS NULL WHERE pi.post_id IN :ids ORDER BY pi.post_id, pi.id").bindparams(bindparam("ids", expanding=True))
+        all_file_rows = db.execute(stmt, {"ids": post_ids}).mappings().fetchall()
+        files_by_post: dict[int, list] = {pid: [] for pid in post_ids}
+        for fr in all_file_rows:
+            files_by_post[fr["post_id"]].append(dict(fr))
+        result = [(dict(row), files_by_post.get(row["id"]) or []) for row in rows]
         return result, has_more
 
     @classmethod
-    def update_post(cls, post_id: int, title: Optional[str] = None, content: Optional[str] = None, image_ids: Optional[List[int]] = None) -> bool:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                if title is not None:
-                    cur.execute(
-                        "UPDATE posts SET title = %s WHERE id = %s AND deleted_at IS NULL",
-                        (title, post_id),
-                    )
-                if content is not None:
-                    cur.execute(
-                        "UPDATE posts SET content = %s WHERE id = %s AND deleted_at IS NULL",
-                        (content, post_id),
-                    )
-                if image_ids is not None:
-                    cur.execute("SELECT image_id FROM post_images WHERE post_id = %s", (post_id,))
-                    old_image_ids = {r["image_id"] for r in cur.fetchall()}
-                    new_image_ids_set = set(image_ids[: cls.MAX_POST_IMAGES])
-                    removed_ids = old_image_ids - new_image_ids_set
-                    cur.execute("DELETE FROM post_images WHERE post_id = %s", (post_id,))
-                    for iid in image_ids[: cls.MAX_POST_IMAGES]:
-                        cur.execute(
-                            "INSERT INTO post_images (post_id, image_id) VALUES (%s, %s)",
-                            (post_id, iid),
-                        )
-                    for img_id in removed_ids:
-                        cur.execute("SELECT 1 FROM post_images WHERE image_id = %s LIMIT 1", (img_id,))
-                        if cur.fetchone() is None:
-                            cur.execute(
-                                "UPDATE images SET deleted_at = NOW() WHERE id = %s AND deleted_at IS NULL",
-                                (img_id,),
-                            )
-            conn.commit()
+    def update_post(cls, post_id: int, title: Optional[str] = None, content: Optional[str] = None, image_ids: Optional[List[int]] = None, *, db: Session) -> bool:
+        if title is not None:
+            db.execute(text("UPDATE posts SET title = :title WHERE id = :pid AND deleted_at IS NULL"), {"title": title, "pid": post_id})
+        if content is not None:
+            db.execute(text("UPDATE posts SET content = :content WHERE id = :pid AND deleted_at IS NULL"), {"content": content, "pid": post_id})
+        if image_ids is not None:
+            old_rows = db.execute(text("SELECT image_id FROM post_images WHERE post_id = :pid"), {"pid": post_id}).mappings().fetchall()
+            old_image_ids = {r["image_id"] for r in old_rows}
+            new_image_ids_set = set(image_ids[: cls.MAX_POST_IMAGES])
+            to_add = new_image_ids_set - old_image_ids
+            to_remove = old_image_ids - new_image_ids_set
+            for iid in to_add:
+                db.execute(text("INSERT INTO post_images (post_id, image_id) VALUES (:pid, :iid)"), {"pid": post_id, "iid": iid})
+            if to_remove:
+                stmt = text("DELETE FROM post_images WHERE post_id = :pid AND image_id IN :ids").bindparams(bindparam("ids", expanding=True))
+                db.execute(stmt, {"pid": post_id, "ids": list(to_remove)})
+            for img_id in to_remove:
+                row = db.execute(text("SELECT 1 FROM post_images WHERE image_id = :iid LIMIT 1"), {"iid": img_id}).mappings().fetchone()
+                if row is None:
+                    db.execute(text("UPDATE images SET deleted_at = NOW() WHERE id = :iid AND deleted_at IS NULL"), {"iid": img_id})
         return True
 
     @classmethod
-    def withdraw_post(cls, post_id: int) -> bool:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE comments SET deleted_at = NOW() WHERE post_id = %s AND deleted_at IS NULL",
-                    (post_id,),
-                )
-                cur.execute("DELETE FROM likes WHERE post_id = %s", (post_id,))
-                cur.execute("SELECT image_id FROM post_images WHERE post_id = %s", (post_id,))
-                image_ids = [r["image_id"] for r in cur.fetchall()]
-                cur.execute("DELETE FROM post_images WHERE post_id = %s", (post_id,))
-                for img_id in image_ids:
-                    cur.execute("SELECT 1 FROM post_images WHERE image_id = %s LIMIT 1", (img_id,))
-                    if cur.fetchone() is None:
-                        cur.execute(
-                            "UPDATE images SET deleted_at = NOW() WHERE id = %s AND deleted_at IS NULL",
-                            (img_id,),
-                        )
-                cur.execute("UPDATE posts SET deleted_at = NOW() WHERE id = %s AND deleted_at IS NULL", (post_id,))
-                affected = cur.rowcount
-            conn.commit()
-        return affected > 0
+    def withdraw_post(cls, post_id: int, db: Session) -> bool:
+        db.execute(text("UPDATE comments SET deleted_at = NOW() WHERE post_id = :pid AND deleted_at IS NULL"), {"pid": post_id})
+        db.execute(text("DELETE FROM likes WHERE post_id = :pid"), {"pid": post_id})
+        img_rows = db.execute(text("SELECT image_id FROM post_images WHERE post_id = :pid"), {"pid": post_id}).mappings().fetchall()
+        image_ids = [r["image_id"] for r in img_rows]
+        db.execute(text("DELETE FROM post_images WHERE post_id = :pid"), {"pid": post_id})
+        for img_id in image_ids:
+            row = db.execute(text("SELECT 1 FROM post_images WHERE image_id = :iid LIMIT 1"), {"iid": img_id}).mappings().fetchone()
+            if row is None:
+                db.execute(text("UPDATE images SET deleted_at = NOW() WHERE id = :iid AND deleted_at IS NULL"), {"iid": img_id})
+        result = db.execute(text("UPDATE posts SET deleted_at = NOW() WHERE id = :pid AND deleted_at IS NULL"), {"pid": post_id})
+        return result.rowcount > 0
 
     @classmethod
-    def increment_hits(cls, post_id: int) -> bool:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE posts SET view_count = view_count + 1 WHERE id = %s AND deleted_at IS NULL",
-                    (post_id,),
-                )
-            conn.commit()
+    def increment_view_count(cls, post_id: int, db: Session) -> bool:
+        db.execute(text("UPDATE posts SET view_count = view_count + 1 WHERE id = :pid AND deleted_at IS NULL"), {"pid": post_id})
         return True
 
     @classmethod
-    def increment_like_count(cls, post_id: int) -> int:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("UPDATE posts SET like_count = like_count + 1 WHERE id = %s", (post_id,))
-                cur.execute("SELECT like_count FROM posts WHERE id = %s", (post_id,))
-                row = cur.fetchone()
-            conn.commit()
+    def get_like_count(cls, post_id: int, db: Session) -> int:
+        """동시성 고려: 응답용 like_count는 이 값 사용 (stale 방지)."""
+        row = db.execute(text("SELECT like_count FROM posts WHERE id = :pid"), {"pid": post_id}).mappings().fetchone()
+        return int(row["like_count"]) if row else 0
+
+    @classmethod
+    def increment_like_count(cls, post_id: int, db: Session) -> int:
+        db.execute(text("UPDATE posts SET like_count = like_count + 1 WHERE id = :pid"), {"pid": post_id})
+        row = db.execute(text("SELECT like_count FROM posts WHERE id = :pid"), {"pid": post_id}).mappings().fetchone()
         return row["like_count"] if row else 0
 
     @classmethod
-    def decrement_like_count(cls, post_id: int) -> int:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE posts SET like_count = GREATEST(0, like_count - 1) WHERE id = %s",
-                    (post_id,),
-                )
-                cur.execute("SELECT like_count FROM posts WHERE id = %s", (post_id,))
-                row = cur.fetchone()
-            conn.commit()
+    def decrement_like_count(cls, post_id: int, db: Session) -> int:
+        db.execute(text("UPDATE posts SET like_count = GREATEST(0, like_count - 1) WHERE id = :pid"), {"pid": post_id})
+        row = db.execute(text("SELECT like_count FROM posts WHERE id = :pid"), {"pid": post_id}).mappings().fetchone()
         return row["like_count"] if row else 0
 
     @classmethod
-    def increment_comment_count(cls, post_id: int, conn: Optional[Any] = None) -> bool:
-        if conn is not None:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE posts SET comment_count = comment_count + 1 WHERE id = %s",
-                    (post_id,),
-                )
-            return True
-        with get_connection() as c:
-            with c.cursor() as cur:
-                cur.execute(
-                    "UPDATE posts SET comment_count = comment_count + 1 WHERE id = %s",
-                    (post_id,),
-                )
-            c.commit()
+    def increment_comment_count(cls, post_id: int, db: Session) -> bool:
+        db.execute(text("UPDATE posts SET comment_count = comment_count + 1 WHERE id = :pid"), {"pid": post_id})
         return True
 
     @classmethod
-    def decrement_comment_count(cls, post_id: int, conn: Optional[Any] = None) -> bool:
-        if conn is not None:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE posts SET comment_count = GREATEST(0, comment_count - 1) WHERE id = %s",
-                    (post_id,),
-                )
-            return True
-        with get_connection() as c:
-            with c.cursor() as cur:
-                cur.execute(
-                    "UPDATE posts SET comment_count = GREATEST(0, comment_count - 1) WHERE id = %s",
-                    (post_id,),
-                )
-            c.commit()
+    def decrement_comment_count(cls, post_id: int, db: Session) -> bool:
+        db.execute(text("UPDATE posts SET comment_count = GREATEST(0, comment_count - 1) WHERE id = :pid"), {"pid": post_id})
         return True
 
 
 class PostLikesModel:
-    @classmethod
-    def _liker_key_user(cls, user_id: int) -> str:
-        return f"u_{user_id}"
+    """likes 테이블 (post_id, user_id) UNIQUE. 중복 좋아요 시 IntegrityError로 처리."""
 
     @classmethod
-    def has_liked(cls, post_id: int, liker_key: str) -> bool:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT 1 FROM likes WHERE post_id = %s AND liker_key = %s LIMIT 1",
-                    (post_id, liker_key),
-                )
-                return cur.fetchone() is not None
-
-    @classmethod
-    def create_like(cls, post_id: int, liker_key: str, user_id: Optional[int] = None) -> Optional[dict]:
+    def add_like(cls, post_id: int, user_id: int, *, db: Session) -> Optional[dict]:
         try:
-            with get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "INSERT INTO likes (post_id, liker_key, user_id) VALUES (%s, %s, %s)",
-                        (post_id, liker_key, user_id),
-                    )
-                conn.commit()
-            return {"post_id": post_id, "liker_key": liker_key}
-        except pymysql.err.IntegrityError:
+            db.execute(text("INSERT INTO likes (post_id, user_id) VALUES (:pid, :uid)"), {"pid": post_id, "uid": user_id})
+            return {"post_id": post_id, "user_id": user_id}
+        except IntegrityError:
             return None
         except Exception as e:
             logger.exception("likes INSERT 실패: %s", e)
             raise
 
     @classmethod
-    def delete_like(cls, post_id: int, liker_key: str) -> bool:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "DELETE FROM likes WHERE post_id = %s AND liker_key = %s",
-                    (post_id, liker_key),
-                )
-                affected = cur.rowcount
-            conn.commit()
-        return affected > 0
+    def remove_like(cls, post_id: int, user_id: int, db: Session) -> bool:
+        result = db.execute(text("DELETE FROM likes WHERE post_id = :pid AND user_id = :uid"), {"pid": post_id, "uid": user_id})
+        return result.rowcount > 0

@@ -36,7 +36,7 @@ class UserAvailabilityQuery(BaseModel):
 
 class UpdateUserRequest(BaseModel):
     nickname: Optional[str] = Field(default=None)
-    profileImageId: Optional[int] = Field(default=None)
+    profile_image_id: Optional[int] = Field(default=None, validation_alias="profileImageId", serialization_alias="profileImageId")
 
     @field_validator("nickname", mode="before")
     @classmethod
@@ -49,7 +49,7 @@ class UpdateUserRequest(BaseModel):
 
     @model_validator(mode="after")
     def at_least_one(self):
-        if self.nickname is None and self.profileImageId is None:
+        if self.nickname is None and self.profile_image_id is None:
             raise ValueError("MISSING_REQUIRED_FIELD")
         return self
 
@@ -62,10 +62,10 @@ class UpdateUserRequest(BaseModel):
 
 
 class UpdatePasswordRequest(BaseModel):
-    currentPassword: str = Field(..., min_length=1)
-    newPassword: str = Field(...)
+    current_password: str = Field(..., min_length=1, validation_alias="currentPassword", serialization_alias="currentPassword")
+    new_password: str = Field(..., validation_alias="newPassword", serialization_alias="newPassword")
 
-    @field_validator("newPassword", mode="after")
+    @field_validator("new_password", mode="after")
     @classmethod
     def new_password_format(cls, v: str) -> str:
         return ensure_password_format(v)

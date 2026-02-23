@@ -124,12 +124,12 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 │   ├── core/                      # 공통 유틸·설정
 │   │   ├── config.py              # 환경 변수 (포트, DB, CORS, 파일 업로드 등)
 │   │   ├── codes.py               # 응답 코드 (ApiCode)
-│   │   ├── database.py            # MySQL 연결 관리
+│   │   ├── database.py            # SQLAlchemy + MySQL (get_db Depends, Session 주입)
 │   │   ├── dependencies.py        # 로그인 검증, 게시글/댓글 작성자 검증
 │   │   ├── exception_handlers.py  # 에러 응답 포맷 통일 ({code, data})
-│   │   ├── file_upload.py         # 이미지 검증·저장·URL 반환 (로컬/S3)
 │   │   ├── rate_limit.py          # 요청 제한 (전역 + 로그인 전용)
 │   │   ├── response.py            # 성공/실패 응답 포맷
+│   │   ├── storage.py             # 스토리지 인프라 (저장/삭제/URL 생성, local|S3)
 │   │   └── validators.py          # 비밀번호·닉네임·URL 형식 검증
 │   │
 │   ├── auth/                      # 인증
@@ -147,7 +147,8 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 │   ├── media/                     # 미디어 (이미지 업로드 API)
 │   │   ├── router.py         # POST /images (프로필·게시글 공통)
 │   │   ├── controller.py         # 업로드 후 images 테이블 저장
-│   │   └── model.py              # images DB 접근
+│   │   ├── model.py              # images DB CRUD (메타)
+│   │   └── upload.py             # 검증·용도 분기·키 생성 (도메인 정책)
 │   │
 │   ├── posts/                     # 게시글
 │   │   ├── router.py         # 게시글 CRUD·좋아요 API (이미지는 /media/images 업로드 후 imageIds)
@@ -208,10 +209,10 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 │     → auth.controller.signup_user(), posts.controller.create_post() 등 호출│
 │                                                                      │
 │  ⑦ Controller                                                        │
-│     → 비즈니스 로직 처리, Model 호출, success_response / raise_http   │
+│     → 비즈니스 로직·예외만. commit/rollback은 get_db(세션 스코프)에서 담당   │
 │                                                                      │
 │  ⑧ Model                                                              │
-│     → get_connection()으로 DB 연결, SQL 실행, 명시적 commit (autocommit=False)│
+│     → Depends(get_db)로 받은 Session 사용, db.execute()만. commit 없음     │
 │                                                                      │
 │  ⑨ 예외 핸들러 (전역)                                                 │
 │     → RequestValidationError, HTTPException, DB 예외 → { code, data } 통일│
@@ -236,7 +237,8 @@ mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS puppytalk;"
 mysql -u root -p puppytalk < docs/puppyytalkdb.sql
 ```
 
-DDL은 `docs/puppyytalkdb.sql`을 참고합니다. **데이터만 비우기**(테이블 구조 유지)가 필요하면 `docs/clear_db.sql`을 실행하면 됩니다.
+DDL은 `docs/puppyytalkdb.sql`을 참고합니다. **데이터만 비우기**(테이블 구조 유지)가 필요하면 `docs/clear_db.sql`을 실행하면 됩니다.  
+`likes` 테이블은 `(post_id, user_id)` UNIQUE(로그인 유저만 좋아요)이며, 중복 좋아요 시 IntegrityError로 처리됩니다.
 
 ### 2. 가상환경 및 패키지
 

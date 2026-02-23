@@ -3,10 +3,10 @@
 
 import logging
 
-import pymysql
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.core.codes import ApiCode
 
@@ -87,14 +87,14 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={"code": code_str, "data": None},
         )
 
-    # DB 예외: 중복키/무결성/연결실패 등 { code, data } 통일
-    @app.exception_handler(pymysql.err.IntegrityError)
-    async def integrity_error_handler(request: Request, exc: pymysql.err.IntegrityError):
-        err_msg = exc.args[1] if len(exc.args) > 1 else str(exc)
-        errno = getattr(exc, "args", (0, ""))[0] if exc.args else 0
+    # DB 예외: SQLAlchemy가 드라이버(pymysql) 예외를 래핑하므로 sqlalchemy.exc 사용
+    @app.exception_handler(IntegrityError)
+    async def integrity_error_handler(request: Request, exc: IntegrityError):
+        orig = getattr(exc, "orig", None)
+        errno = (orig.args[0] if orig and getattr(orig, "args", None) else 0) or 0
+        err_msg = (orig.args[1] if orig and len(getattr(orig, "args", ())) > 1 else str(exc)) or ""
         # 1062=Duplicate entry (UNIQUE 위반)
         if errno == 1062:
-            # 회원가입 시 이메일/닉네임 중복 → 구체적 코드 반환
             msg_lower = err_msg.lower() if isinstance(err_msg, str) else ""
             if "email" in msg_lower or "key 'email'" in msg_lower:
                 return JSONResponse(status_code=409, content={"code": ApiCode.EMAIL_ALREADY_EXISTS.value, "data": None})
@@ -105,19 +105,10 @@ def register_exception_handlers(app: FastAPI) -> None:
             return JSONResponse(status_code=409, content={"code": ApiCode.CONSTRAINT_ERROR.value, "data": None})
         return JSONResponse(status_code=400, content={"code": ApiCode.INVALID_REQUEST.value, "data": None})
 
-    @app.exception_handler(pymysql.err.OperationalError)
-    async def operational_error_handler(request: Request, exc: pymysql.err.OperationalError):
+    @app.exception_handler(OperationalError)
+    async def operational_error_handler(request: Request, exc: OperationalError):
         logger.error(
-            "DB OperationalError: Path=%s, Errno=%s",
-            request.url.path,
-            getattr(exc, "args", ())[:1],
-        )
-        return JSONResponse(status_code=500, content={"code": ApiCode.DB_ERROR.value, "data": None})
-
-    @app.exception_handler(pymysql.err.Error)
-    async def pymysql_error_handler(request: Request, exc: pymysql.err.Error):
-        logger.error(
-            "DB Error: Path=%s, Exception=%s",
+            "DB OperationalError: Path=%s, Exception=%s",
             request.url.path,
             type(exc).__name__,
         )

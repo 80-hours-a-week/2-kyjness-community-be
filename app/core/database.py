@@ -1,56 +1,62 @@
 # app/core/database.py
-"""DB 연결 관리 (MySQL puppytalk). per-call 연결, 요청 후 close 보장."""
+"""DB 연결 관리 (SQLAlchemy + MySQL puppytalk). 요청당 Session 주입."""
 
 import logging
 from contextlib import contextmanager
+from typing import Generator
+from urllib.parse import quote_plus
 
-import pymysql
-from pymysql.cursors import DictCursor
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+DATABASE_URL = (
+    f"mysql+pymysql://{settings.DB_USER}:{quote_plus(settings.DB_PASSWORD)}"
+    f"@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
+    "?charset=utf8mb4"
+)
+
+engine: Engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=3600)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def get_db() -> Generator[Session, None, None]:
+    """요청 단위 DB 세션. yield 뒤 성공 시 commit, 예외 시 rollback (세션 스코프 패턴).
+    controller는 비즈니스 로직만, commit/rollback은 여기서 일괄 처리."""
+    db = SessionLocal()
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
 
 @contextmanager
 def get_connection():
-    """MySQL 연결 context manager. DictCursor로 dict 형태 행 반환. 사용 후 자동 close.
-    여러 model 호출을 한 트랜잭션으로 묶을 때: with get_connection() as conn: ...; model.xxx(..., conn=conn); conn.commit()
-    예외 시 자동 rollback."""
-    conn = None
+    """백그라운드 스레드용 (세션 정리 등). 요청 범위 아님."""
+    db = SessionLocal()
     try:
-        conn = pymysql.connect(
-            host=settings.DB_HOST,
-            port=settings.DB_PORT,
-            user=settings.DB_USER,
-            password=settings.DB_PASSWORD,
-            database=settings.DB_NAME,
-            charset="utf8mb4",
-            cursorclass=DictCursor,
-            autocommit=False,
-        )
-        yield conn
+        yield db
+        db.commit()
     except Exception:
-        if conn:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
+        db.rollback()
         raise
     finally:
-        if conn:
-            try:
-                conn.close()
-            except Exception:
-                pass
+        db.close()
 
 
 def init_database() -> bool:
-    """서버 시작 시 DB 연결 체크. SELECT 1 실행."""
+    """서버 시작 시 DB 연결 체크."""
     try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1")
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
         return True
     except Exception as e:
         logger.error("MySQL 연결 실패: %s", e)
@@ -58,5 +64,5 @@ def init_database() -> bool:
 
 
 def close_database() -> None:
-    """연결 종료. per-call 연결 사용 시 no-op."""
-    pass
+    """연결 풀 종료."""
+    engine.dispose()

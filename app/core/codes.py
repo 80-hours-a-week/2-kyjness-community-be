@@ -1,15 +1,9 @@
-# app/core/codes.py
-"""API 응답 code 값 통일. 타입/오타 방지용 enum."""
-
 from enum import Enum
 
 
 class ApiCode(str, Enum):
-    """성공·실패 응답의 code 필드 값. str 상속으로 JSON 직렬화 시 문자열로 나감."""
-
     # --- 공통 ---
     OK = "OK"
-
     # --- Auth ---
     SIGNUP_SUCCESS = "SIGNUP_SUCCESS"
     LOGIN_SUCCESS = "LOGIN_SUCCESS"
@@ -20,14 +14,12 @@ class ApiCode(str, Enum):
     INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
     EMAIL_NOT_FOUND = "EMAIL_NOT_FOUND"
     UNAUTHORIZED = "UNAUTHORIZED"
-
     # --- Users ---
     USER_RETRIEVED = "USER_RETRIEVED"
     USER_UPDATED = "USER_UPDATED"
     PASSWORD_UPDATED = "PASSWORD_UPDATED"
     USER_NOT_FOUND = "USER_NOT_FOUND"
     INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR"
-
     # --- Posts ---
     POST_UPLOADED = "POST_UPLOADED"
     POST_RETRIEVED = "POST_RETRIEVED"
@@ -41,14 +33,12 @@ class ApiCode(str, Enum):
     ALREADY_LIKED = "ALREADY_LIKED"
     CONFLICT = "CONFLICT"
     FORBIDDEN = "FORBIDDEN"
-
     # --- Comments ---
     COMMENT_UPLOADED = "COMMENT_UPLOADED"
     COMMENT_UPDATED = "COMMENT_UPDATED"
     COMMENTS_RETRIEVED = "COMMENTS_RETRIEVED"
     COMMENT_NOT_FOUND = "COMMENT_NOT_FOUND"
     INVALID_POSTID_FORMAT = "INVALID_POSTID_FORMAT"
-
     # --- 요청/검증 ---
     INVALID_REQUEST = "INVALID_REQUEST"
     INVALID_REQUEST_BODY = "INVALID_REQUEST_BODY"
@@ -62,7 +52,7 @@ class ApiCode(str, Enum):
     IMAGE_NOT_FOUND = "IMAGE_NOT_FOUND"
     INVALID_IMAGE_FILE = "INVALID_IMAGE_FILE"
     FILE_SIZE_EXCEEDED = "FILE_SIZE_EXCEEDED"
-
+    IMAGE_UPLOADED = "IMAGE_UPLOADED"
     # --- 전역/기타 ---
     NOT_FOUND = "NOT_FOUND"
     METHOD_NOT_ALLOWED = "METHOD_NOT_ALLOWED"

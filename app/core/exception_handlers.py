@@ -1,19 +1,14 @@
-# app/core/exception_handlers.py
-"""전역 예외 핸들러. 모든 오류 응답을 { code, data } 형식으로 통일."""
-
 import logging
 
-import pymysql
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.core.codes import ApiCode
 
 logger = logging.getLogger(__name__)
 
-
-# 라우트 없음(404), 메서드 불일치(405) 등 공통 code 매핑
 HTTP_STATUS_TO_CODE = {
     400: ApiCode.INVALID_REQUEST,
     401: ApiCode.UNAUTHORIZED,
@@ -28,8 +23,6 @@ HTTP_STATUS_TO_CODE = {
 
 
 def register_exception_handlers(app: FastAPI) -> None:
-    """전역 예외 핸들러 등록. 어떤 예외든 { code, data } 형식으로 응답."""
-
     _KNOWN_CODES = frozenset({
         "INVALID_EMAIL_FORMAT", "INVALID_PASSWORD_FORMAT", "INVALID_NICKNAME_FORMAT",
         "INVALID_PROFILEIMAGEURL", "INVALID_FILE_URL", "INVALID_REQUEST",
@@ -37,33 +30,23 @@ def register_exception_handlers(app: FastAPI) -> None:
     })
 
     def _pick_validation_code(request: Request, errors: list) -> str:
-        """에러 목록에서 클라이언트에 반환할 code 하나 선택. 로그인 경로는 이메일 오류 우선."""
         is_login = "/auth/login" in request.url.path or request.url.path.endswith("/login")
-        email_code = None
-        other_code = None
+        found_codes = []
         for err in errors:
             loc = err.get("loc", ())
             msg = err.get("msg", "") if isinstance(err.get("msg"), str) else ""
             if "email" in loc or ("email" in msg.lower() and "valid" in msg.lower()):
-                email_code = "INVALID_EMAIL_FORMAT"
+                found_codes.append("INVALID_EMAIL_FORMAT")
             for known in _KNOWN_CODES:
                 if known in msg or msg == known:
-                    if "email" in loc or known == "INVALID_EMAIL_FORMAT":
-                        email_code = known
-                    else:
-                        other_code = known
+                    found_codes.append(known)
                     break
-        if is_login and email_code:
-            return email_code
-        if other_code:
-            return other_code
-        if email_code:
-            return email_code
-        for err in errors:
-            msg = err.get("msg", "") if isinstance(err.get("msg"), str) else ""
-            for known in _KNOWN_CODES:
-                if known in msg or msg == known:
-                    return known
+        if is_login:
+            for code in found_codes:
+                if code == "INVALID_EMAIL_FORMAT":
+                    return code
+        for code in found_codes:
+            return code
         return ApiCode.INVALID_REQUEST_BODY.value
 
     @app.exception_handler(RequestValidationError)
@@ -73,7 +56,6 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
-        # 응답 포맷 통일: 우리 포맷(dict with code)이면 그대로, 아니면 code 매핑
         if isinstance(exc.detail, dict) and "code" in exc.detail:
             return JSONResponse(status_code=exc.status_code, content=exc.detail)
         code = HTTP_STATUS_TO_CODE.get(exc.status_code)
@@ -87,14 +69,14 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={"code": code_str, "data": None},
         )
 
-    # DB 예외: 중복키/무결성/연결실패 등 { code, data } 통일
-    @app.exception_handler(pymysql.err.IntegrityError)
-    async def integrity_error_handler(request: Request, exc: pymysql.err.IntegrityError):
-        err_msg = exc.args[1] if len(exc.args) > 1 else str(exc)
-        errno = getattr(exc, "args", (0, ""))[0] if exc.args else 0
+    # DB 예외: SQLAlchemy가 드라이버(pymysql) 예외를 래핑하므로 sqlalchemy.exc 사용
+    @app.exception_handler(IntegrityError)
+    async def integrity_error_handler(request: Request, exc: IntegrityError):
+        orig = getattr(exc, "orig", None)
+        errno = (orig.args[0] if orig and getattr(orig, "args", None) else 0) or 0
+        err_msg = (orig.args[1] if orig and len(getattr(orig, "args", ())) > 1 else str(exc)) or ""
         # 1062=Duplicate entry (UNIQUE 위반)
         if errno == 1062:
-            # 회원가입 시 이메일/닉네임 중복 → 구체적 코드 반환
             msg_lower = err_msg.lower() if isinstance(err_msg, str) else ""
             if "email" in msg_lower or "key 'email'" in msg_lower:
                 return JSONResponse(status_code=409, content={"code": ApiCode.EMAIL_ALREADY_EXISTS.value, "data": None})
@@ -105,19 +87,10 @@ def register_exception_handlers(app: FastAPI) -> None:
             return JSONResponse(status_code=409, content={"code": ApiCode.CONSTRAINT_ERROR.value, "data": None})
         return JSONResponse(status_code=400, content={"code": ApiCode.INVALID_REQUEST.value, "data": None})
 
-    @app.exception_handler(pymysql.err.OperationalError)
-    async def operational_error_handler(request: Request, exc: pymysql.err.OperationalError):
+    @app.exception_handler(OperationalError)
+    async def operational_error_handler(request: Request, exc: OperationalError):
         logger.error(
-            "DB OperationalError: Path=%s, Errno=%s",
-            request.url.path,
-            getattr(exc, "args", ())[:1],
-        )
-        return JSONResponse(status_code=500, content={"code": ApiCode.DB_ERROR.value, "data": None})
-
-    @app.exception_handler(pymysql.err.Error)
-    async def pymysql_error_handler(request: Request, exc: pymysql.err.Error):
-        logger.error(
-            "DB Error: Path=%s, Exception=%s",
+            "DB OperationalError: Path=%s, Exception=%s",
             request.url.path,
             type(exc).__name__,
         )

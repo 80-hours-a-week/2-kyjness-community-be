@@ -97,13 +97,26 @@ CREATE TABLE post_images (
       ON DELETE CASCADE
 );
 
--- 6. likes (회원: liker_key='u_'+user_id, 비회원: liker_key=anon_id)
+-- post_images: 게시글당 최대 5개 제한 (API 검증 + DB 방어)
+DROP TRIGGER IF EXISTS tr_post_images_max_five;
+DELIMITER //
+CREATE TRIGGER tr_post_images_max_five
+BEFORE INSERT ON post_images
+FOR EACH ROW
+BEGIN
+  IF (SELECT COUNT(*) FROM post_images WHERE post_id = NEW.post_id) >= 5 THEN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'post_images: post당 최대 5개';
+  END IF;
+END//
+DELIMITER ;
+
+-- 6. likes (로그인 유저만 좋아요, UNIQUE(post_id, user_id))
 CREATE TABLE likes (
     post_id     INT UNSIGNED NOT NULL,
-    liker_key   VARCHAR(255) NOT NULL,
-    user_id     INT UNSIGNED NULL,
+    user_id     INT UNSIGNED NOT NULL,
     created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (post_id, liker_key),
+    PRIMARY KEY (post_id, user_id),
 
     CONSTRAINT fk_likes_post
       FOREIGN KEY (post_id) REFERENCES posts(id)
@@ -124,9 +137,12 @@ CREATE TABLE sessions (
       FOREIGN KEY (user_id) REFERENCES users(id)
       ON DELETE CASCADE
 );
+-- 확장 시: revoked_at TIMESTAMP NULL 추가 후 로그아웃 시 soft revoke (DELETE 대신 UPDATE).
+--         만료(expires_at) 또는 철회(revoked_at)된 세션 주기적 삭제(cleanup)는 앱에서 이미 실행 중.
 
 -- 인덱스 (조회/조인 성능)
 CREATE INDEX idx_posts_user_id ON posts(user_id);
+CREATE INDEX idx_posts_deleted_at_id ON posts(deleted_at, id DESC);
 CREATE INDEX idx_comments_post_id ON comments(post_id);
 CREATE INDEX idx_comments_author_id ON comments(author_id);
 CREATE INDEX idx_images_uploader_id ON images(uploader_id);

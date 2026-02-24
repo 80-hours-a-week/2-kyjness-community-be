@@ -1,9 +1,9 @@
-# app/media/model.py
-
 from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from app.core.storage import storage_delete
 
 
 class MediaModel:
@@ -34,8 +34,19 @@ class MediaModel:
 
     @classmethod
     def withdraw_by_url(cls, file_url: str, db: Session) -> bool:
+        """DB 소프트 삭제 + 스토리지 파일 삭제. file_key 조회 후 storage_delete 호출."""
         if not file_url or not file_url.strip():
             return False
+        row = db.execute(
+            text("SELECT file_key FROM images WHERE file_url = :url AND deleted_at IS NULL"),
+            {"url": file_url.strip()},
+        ).mappings().fetchone()
+        if not row:
+            return False
+        try:
+            storage_delete(row["file_key"])
+        except Exception:
+            pass  # 스토리지 삭제 실패해도 DB는 삭제 처리
         result = db.execute(
             text("UPDATE images SET deleted_at = NOW() WHERE file_url = :url AND deleted_at IS NULL"),
             {"url": file_url.strip()},

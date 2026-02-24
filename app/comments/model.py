@@ -1,5 +1,3 @@
-# app/comments/model.py
-
 from typing import List, Optional
 
 from sqlalchemy import text

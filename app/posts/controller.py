@@ -1,5 +1,3 @@
-# app/posts/controller.py
-
 import logging
 
 from fastapi import HTTPException
@@ -16,7 +14,7 @@ from app.users.model import UsersModel
 logger = logging.getLogger(__name__)
 
 
-def create_post(user: CurrentUser, data: PostCreateRequest, db: Session):
+def create_post(user: CurrentUser, data: PostCreateRequest, db: Session) -> dict:
     try:
         if data.image_ids:
             for iid in data.image_ids:
@@ -31,10 +29,10 @@ def create_post(user: CurrentUser, data: PostCreateRequest, db: Session):
         raise_http_error(500, ApiCode.INTERNAL_SERVER_ERROR)
 
 
-def get_posts(page: int, size: int, db: Session):
+def get_posts(page: int, size: int, db: Session) -> dict:
     posts_with_files, has_more = PostsModel.get_all_posts(page, size, db=db)
     if not posts_with_files:
-        return {"code": ApiCode.POSTS_RETRIEVED.value, "data": [], "hasMore": has_more}
+        return success_response(ApiCode.POSTS_RETRIEVED, {"list": [], "hasMore": has_more})
     user_ids = list({post_row["user_id"] for post_row, _ in posts_with_files})
     authors_by_id = UsersModel.find_users_by_ids(user_ids, db=db)
     result = []
@@ -44,7 +42,7 @@ def get_posts(page: int, size: int, db: Session):
             result.append(
                 PostListResponse.from_rows(post_row, file_rows, author).model_dump(by_alias=True)
             )
-    return {"code": ApiCode.POSTS_RETRIEVED.value, "data": result, "hasMore": has_more}
+    return success_response(ApiCode.POSTS_RETRIEVED, {"list": result, "hasMore": has_more})
 
 
 def record_post_view(post_id: int, db: Session) -> None:
@@ -53,7 +51,7 @@ def record_post_view(post_id: int, db: Session) -> None:
     PostsModel.increment_view_count(post_id, db=db)
 
 
-def get_post(post_id: int, db: Session):
+def get_post(post_id: int, db: Session) -> dict:
     found = PostsModel.find_post_by_id(post_id, db=db)
     if not found:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
@@ -65,7 +63,7 @@ def get_post(post_id: int, db: Session):
     return success_response(ApiCode.POST_RETRIEVED, data)
 
 
-def update_post(post_id: int, data: PostUpdateRequest, db: Session):
+def update_post(post_id: int, data: PostUpdateRequest, db: Session) -> dict:
     if PostsModel.find_post_by_id(post_id, db=db) is None:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
     if data.image_ids is not None:
@@ -76,13 +74,12 @@ def update_post(post_id: int, data: PostUpdateRequest, db: Session):
     return success_response(ApiCode.POST_UPDATED)
 
 
-def withdraw_post(post_id: int, db: Session):
+def withdraw_post(post_id: int, db: Session) -> None:
     if not PostsModel.withdraw_post(post_id, db=db):
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
 
 
 def add_like(post_id: int, user: CurrentUser, db: Session) -> tuple[dict, int]:
-    """(응답 dict, HTTP status_code) 반환. INSERT 성공 시 201, 중복(이미 좋아요) 시 200. UNIQUE(post_id, user_id)로 처리."""
     if PostsModel.find_post_by_id(post_id, db=db) is None:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
     like = PostLikesModel.add_like(post_id, user.id, db=db)
@@ -93,7 +90,7 @@ def add_like(post_id: int, user: CurrentUser, db: Session) -> tuple[dict, int]:
     return success_response(ApiCode.ALREADY_LIKED, {"likeCount": like_count}), 200
 
 
-def remove_like(post_id: int, user: CurrentUser, db: Session):
+def remove_like(post_id: int, user: CurrentUser, db: Session) -> dict:
     if PostsModel.find_post_by_id(post_id, db=db) is None:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
     if not PostLikesModel.remove_like(post_id, user.id, db=db):

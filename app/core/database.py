@@ -1,6 +1,3 @@
-# app/core/database.py
-"""DB 연결 관리 (SQLAlchemy + MySQL puppytalk). 요청당 Session 주입."""
-
 import logging
 from contextlib import contextmanager
 from typing import Generator
@@ -56,7 +53,7 @@ def init_database() -> bool:
     """서버 시작 시 DB 연결 체크."""
     try:
         with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
+            conn.execute(text("SELECT 1")).fetchone()
         return True
     except Exception as e:
         logger.error("MySQL 연결 실패: %s", e)

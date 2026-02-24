@@ -1,5 +1,3 @@
-# app/posts/model.py
-
 import logging
 from typing import List, Optional
 
@@ -38,6 +36,14 @@ class PostsModel:
             {"pid": post_id},
         ).mappings().fetchall()
         return (dict(row), [dict(r) for r in file_rows] if file_rows else [])
+
+    @classmethod
+    def get_post_author_id(cls, post_id: int, db: Session) -> Optional[int]:
+        row = db.execute(
+            text("SELECT user_id FROM posts WHERE id = :pid AND deleted_at IS NULL"),
+            {"pid": post_id},
+        ).mappings().fetchone()
+        return int(row["user_id"]) if row else None
 
     @classmethod
     def get_all_posts(cls, page: int = 1, size: int = 20, *, db: Session) -> tuple[List[tuple[dict, List[dict]]], bool]:

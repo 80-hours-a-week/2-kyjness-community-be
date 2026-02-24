@@ -1,5 +1,3 @@
-# app/posts/schema.py
-
 from datetime import datetime
 from typing import List, Optional
 
@@ -54,13 +52,11 @@ class FileInfo(BaseModel):
         return (v or "").strip() or ""
 
 
-# 목록 조회용 쿼리 (정렬/검색/필터 확장 시 필드 추가). router에서 Depends()로 주입.
 class PostListQuery(BaseModel):
     page: int = Field(1, ge=1, description="페이지 번호")
     size: int = Field(10, ge=1, le=100, description="페이지 크기 (기본 10, 최대 100)")
 
 
-# 목록용 응답: contentPreview(최대 100자), files 0~1개(썸네일)
 class PostListResponse(BaseModel):
     id: int = Field(serialization_alias="postId")
     title: str
@@ -69,7 +65,7 @@ class PostListResponse(BaseModel):
     like_count: int = Field(serialization_alias="likeCount", default=0)
     comment_count: int = Field(serialization_alias="commentCount", default=0)
     author: AuthorInfo
-    files: List[FileInfo] = Field(default_factory=list)  # 0~1개
+    files: List[FileInfo] = Field(default_factory=list)
     created_at: datetime = Field(serialization_alias="createdAt")
 
     @classmethod
@@ -98,7 +94,6 @@ class PostResponse(BaseModel):
 
     @classmethod
     def from_rows(cls, post_row: dict, file_rows: List[dict], author_row: dict) -> "PostResponse":
-        """post_row + file_rows + author_row → 응답. 내부에서 model_validate 활용."""
         data = {
             **post_row,
             "author": author_row,

@@ -1,6 +1,3 @@
-# app/core/exception_handlers.py
-"""전역 예외 핸들러. 모든 오류 응답을 { code, data } 형식으로 통일."""
-
 import logging
 
 from fastapi import FastAPI, HTTPException, Request
@@ -12,8 +9,6 @@ from app.core.codes import ApiCode
 
 logger = logging.getLogger(__name__)
 
-
-# 라우트 없음(404), 메서드 불일치(405) 등 공통 code 매핑
 HTTP_STATUS_TO_CODE = {
     400: ApiCode.INVALID_REQUEST,
     401: ApiCode.UNAUTHORIZED,
@@ -28,8 +23,6 @@ HTTP_STATUS_TO_CODE = {
 
 
 def register_exception_handlers(app: FastAPI) -> None:
-    """전역 예외 핸들러 등록. 어떤 예외든 { code, data } 형식으로 응답."""
-
     _KNOWN_CODES = frozenset({
         "INVALID_EMAIL_FORMAT", "INVALID_PASSWORD_FORMAT", "INVALID_NICKNAME_FORMAT",
         "INVALID_PROFILEIMAGEURL", "INVALID_FILE_URL", "INVALID_REQUEST",
@@ -37,33 +30,23 @@ def register_exception_handlers(app: FastAPI) -> None:
     })
 
     def _pick_validation_code(request: Request, errors: list) -> str:
-        """에러 목록에서 클라이언트에 반환할 code 하나 선택. 로그인 경로는 이메일 오류 우선."""
         is_login = "/auth/login" in request.url.path or request.url.path.endswith("/login")
-        email_code = None
-        other_code = None
+        found_codes = []
         for err in errors:
             loc = err.get("loc", ())
             msg = err.get("msg", "") if isinstance(err.get("msg"), str) else ""
             if "email" in loc or ("email" in msg.lower() and "valid" in msg.lower()):
-                email_code = "INVALID_EMAIL_FORMAT"
+                found_codes.append("INVALID_EMAIL_FORMAT")
             for known in _KNOWN_CODES:
                 if known in msg or msg == known:
-                    if "email" in loc or known == "INVALID_EMAIL_FORMAT":
-                        email_code = known
-                    else:
-                        other_code = known
+                    found_codes.append(known)
                     break
-        if is_login and email_code:
-            return email_code
-        if other_code:
-            return other_code
-        if email_code:
-            return email_code
-        for err in errors:
-            msg = err.get("msg", "") if isinstance(err.get("msg"), str) else ""
-            for known in _KNOWN_CODES:
-                if known in msg or msg == known:
-                    return known
+        if is_login:
+            for code in found_codes:
+                if code == "INVALID_EMAIL_FORMAT":
+                    return code
+        for code in found_codes:
+            return code
         return ApiCode.INVALID_REQUEST_BODY.value
 
     @app.exception_handler(RequestValidationError)
@@ -73,7 +56,6 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
-        # 응답 포맷 통일: 우리 포맷(dict with code)이면 그대로, 아니면 code 매핑
         if isinstance(exc.detail, dict) and "code" in exc.detail:
             return JSONResponse(status_code=exc.status_code, content=exc.detail)
         code = HTTP_STATUS_TO_CODE.get(exc.status_code)

@@ -1,5 +1,3 @@
-# app/auth/model.py
-
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -48,7 +46,6 @@ class AuthModel:
 
     @classmethod
     def cleanup_expired_sessions(cls) -> int:
-        """백그라운드 스레드용. 요청 범위 아님."""
         with get_connection() as db:
             result = db.execute(text("DELETE FROM sessions WHERE expires_at <= NOW()"))
             count = result.rowcount

@@ -1,5 +1,3 @@
-# app/comments/schema.py
-
 from datetime import datetime
 from typing import Optional
 
@@ -30,7 +28,6 @@ class CommentResponse(BaseModel):
 
     @classmethod
     def from_rows(cls, comment_row: dict, author_row: dict, post_id: Optional[int] = None) -> "CommentResponse":
-        """comment_row + author_row → 응답. 내부에서 model_validate 활용."""
         data = {
             **comment_row,
             "author": author_row,

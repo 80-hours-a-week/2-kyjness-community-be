@@ -1,6 +1,3 @@
-# app/core/validators.py
-"""입력 검증 공통 (비밀번호/닉네임)."""
-
 import re
 
 PASSWORD_SPECIAL = re.compile(r"[!@#$%^&*()_+\-=\[\]{};\':\"\\|,.<>/?]")
@@ -24,16 +21,13 @@ def validate_nickname_format(nickname: str) -> bool:
     return bool(nickname and isinstance(nickname, str) and NICKNAME_PATTERN.match(nickname))
 
 
-# --- Pydantic field_validator용 래퍼 (ValueError로 에러 코드 전달) ---
 def ensure_password_format(v: str) -> str:
-    """비밀번호 형식 검증. 실패 시 INVALID_PASSWORD_FORMAT."""
     if not validate_password_format(v):
         raise ValueError("INVALID_PASSWORD_FORMAT")
     return v
 
 
 def ensure_nickname_format(v: str) -> str:
-    """닉네임 형식 검증. 실패 시 INVALID_NICKNAME_FORMAT."""
     if not v or not v.strip():
         raise ValueError("INVALID_NICKNAME_FORMAT")
     if not validate_nickname_format(v.strip()):

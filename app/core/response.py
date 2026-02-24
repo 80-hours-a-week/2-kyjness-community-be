@@ -1,6 +1,3 @@
-# app/core/response.py
-"""공통 응답 포맷: 모든 성공/실패는 { "code": "SOME_CODE", "data": ... } 통일. 실패 시 data는 null."""
-
 from typing import Any, Optional, Union
 
 from fastapi import HTTPException
@@ -10,13 +7,11 @@ from app.core.codes import ApiCode
 
 
 def success_response(code: Union[str, ApiCode], data=None) -> dict:
-    """성공 응답 dict. Route에서 그대로 반환."""
     code_str = code.value if isinstance(code, ApiCode) else code
     return {"code": code_str, "data": data}
 
 
 def raise_http_error(status_code: int, error_code: Union[str, ApiCode], message: Optional[str] = None) -> None:
-    """HTTPException 발생 (detail 포맷 통일). message가 있으면 응답에 포함됨."""
     code_str = error_code.value if isinstance(error_code, ApiCode) else error_code
     detail: dict = {"code": code_str, "data": None}
     if message is not None:
@@ -25,8 +20,6 @@ def raise_http_error(status_code: int, error_code: Union[str, ApiCode], message:
 
 
 class ApiResponse(BaseModel):
-    """OpenAPI용 공통 응답 스키마. response_model 지정 시 /docs 에 표시됨."""
-
     model_config = ConfigDict(extra="allow")
 
     code: str

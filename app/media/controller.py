@@ -1,5 +1,3 @@
-# app/media/controller.py
-
 from typing import Optional
 
 from fastapi import UploadFile
@@ -24,7 +22,7 @@ async def upload_image(file: Optional[UploadFile], user: CurrentUser, purpose: s
         uploader_id=user.id,
         db=db,
     )
-    return success_response(ApiCode.OK, {"imageId": row["id"], "url": row["file_url"]})
+    return success_response(ApiCode.IMAGE_UPLOADED, {"imageId": row["id"], "url": row["file_url"]})
 
 
 def withdraw_image(image_id: int, user: CurrentUser, db: Session) -> None:

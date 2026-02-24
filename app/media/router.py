@@ -1,5 +1,3 @@
-# app/media/router.py
-
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Path, Query, UploadFile
@@ -20,6 +18,6 @@ async def upload_image(image: UploadFile = File(..., description="이미지 파�
 
 
 @router.delete("/images/{image_id}", status_code=204)
-async def withdraw_image(image_id: int = Path(..., description="이미지 ID"), user: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+def withdraw_image(image_id: int = Path(..., ge=1, description="이미지 ID"), user: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
     controller.withdraw_image(image_id=image_id, user=user, db=db)
     return Response(status_code=204)

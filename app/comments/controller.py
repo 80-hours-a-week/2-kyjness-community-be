@@ -1,5 +1,3 @@
-# app/comments/controller.py
-
 import logging
 
 from fastapi import HTTPException

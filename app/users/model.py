@@ -1,5 +1,3 @@
-# app/users/model.py
-
 from datetime import datetime
 from typing import List, Optional
 
@@ -43,14 +41,6 @@ class UsersModel:
         row = db.execute(
             text("SELECT id, email, password, nickname, profile_image_url, created_at FROM users WHERE email = :email AND deleted_at IS NULL"),
             {"email": email.lower()},
-        ).mappings().fetchone()
-        return dict(row) if row else None
-
-    @classmethod
-    def get_user_summary(cls, user_id: int, db: Session) -> Optional[dict]:
-        row = db.execute(
-            text("SELECT id, email, nickname, profile_image_url FROM users WHERE id = :uid AND deleted_at IS NULL"),
-            {"uid": user_id},
         ).mappings().fetchone()
         return dict(row) if row else None
 

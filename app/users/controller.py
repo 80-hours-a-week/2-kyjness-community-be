@@ -1,5 +1,3 @@
-# app/users/controller.py
-
 from sqlalchemy.orm import Session
 
 from app.auth.model import AuthModel
@@ -21,24 +19,22 @@ def check_availability(query: UserAvailabilityQuery, db: Session) -> dict:
     return success_response(ApiCode.OK, data)
 
 
-def get_me(user: CurrentUser):
-    """user는 get_current_user에서 이미 조회됨. 추가 DB 조회 없음."""
+def get_me(user: CurrentUser) -> dict:
     data = UserProfileResponse.model_validate(user).model_dump(by_alias=True)
     return success_response(ApiCode.USER_RETRIEVED, data)
 
 
 def update_me(user: CurrentUser, data: UpdateUserRequest, db: Session) -> dict:
-    if data.nickname is not None and user.nickname != data.nickname:
-        if UsersModel.nickname_exists(data.nickname, db=db):
-            raise_http_error(409, ApiCode.NICKNAME_ALREADY_EXISTS)
+    if data.nickname is not None and user.nickname != data.nickname and UsersModel.nickname_exists(data.nickname, db=db):
+        raise_http_error(409, ApiCode.NICKNAME_ALREADY_EXISTS)
+    profile_image_url = None
     if data.profile_image_id is not None:
         profile_image_url = MediaModel.get_url_by_id(data.profile_image_id, db=db)
         if profile_image_url is None:
             raise_http_error(400, ApiCode.INVALID_REQUEST)
-    if data.nickname is not None:
-        if not UsersModel.update_nickname(user.id, data.nickname, db=db):
-            raise_http_error(500, ApiCode.INTERNAL_SERVER_ERROR)
-    if data.profile_image_id is not None:
+    if data.nickname is not None and not UsersModel.update_nickname(user.id, data.nickname, db=db):
+        raise_http_error(500, ApiCode.INTERNAL_SERVER_ERROR)
+    if profile_image_url is not None:
         if user.profile_image_url:
             MediaModel.withdraw_by_url(user.profile_image_url, db=db)
         if not UsersModel.update_profile_image_url(user.id, profile_image_url, db=db):

@@ -1,12 +1,11 @@
 # API 응답 code · HTTP status 매핑 (내부용)
 
-> 이 문서는 GitHub에 올리지 않습니다 (.gitignore: docs/internal/).
 
 ## 공통
 
 | HTTP | code | 상황 |
 |------|------|------|
-| 200 | OK | 이미지 업로드 성공, 가용성 조회 등 |
+| 200 | OK | 가용성 조회 등 (이미지 업로드는 201 IMAGE_UPLOADED) |
 | 400 | INVALID_REQUEST | 잘못된 요청/파라미터 |
 | 400 | MISSING_REQUIRED_FIELD | 필수 필드 누락 |
 | 401 | UNAUTHORIZED | 미인증 / 세션 만료 / 비밀번호 불일치 |
@@ -80,7 +79,7 @@
 
 | HTTP | code | 상황 |
 |------|------|------|
-| 200 | OK | 이미지 업로드 성공 (imageId, url) |
+| 201 | IMAGE_UPLOADED | 이미지 업로드 성공 (imageId, url) |
 | 404 | IMAGE_NOT_FOUND | 이미지 없음 / 이미 철회됨 |
 | 403 | FORBIDDEN | 타인 업로드 이미지 철회 시도 |
 | 400 | MISSING_REQUIRED_FIELD | 파일 없음 |

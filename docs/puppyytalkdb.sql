@@ -137,9 +137,12 @@ CREATE TABLE sessions (
       FOREIGN KEY (user_id) REFERENCES users(id)
       ON DELETE CASCADE
 );
+-- 확장 시: revoked_at TIMESTAMP NULL 추가 후 로그아웃 시 soft revoke (DELETE 대신 UPDATE).
+--         만료(expires_at) 또는 철회(revoked_at)된 세션 주기적 삭제(cleanup)는 앱에서 이미 실행 중.
 
 -- 인덱스 (조회/조인 성능)
 CREATE INDEX idx_posts_user_id ON posts(user_id);
+CREATE INDEX idx_posts_deleted_at_id ON posts(deleted_at, id DESC);
 CREATE INDEX idx_comments_post_id ON comments(post_id);
 CREATE INDEX idx_comments_author_id ON comments(author_id);
 CREATE INDEX idx_images_uploader_id ON images(uploader_id);

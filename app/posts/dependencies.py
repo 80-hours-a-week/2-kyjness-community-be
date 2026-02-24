@@ -1,6 +1,3 @@
-# app/posts/dependencies.py
-"""posts 라우트에서 Depends()로 사용하는 의존성."""
-
 from fastapi import Query
 
 from app.posts.schema import PostListQuery

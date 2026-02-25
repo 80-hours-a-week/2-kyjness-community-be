@@ -3,9 +3,15 @@ from pathlib import Path
 from typing import List
 from dotenv import load_dotenv
 
-# 프로젝트 루트 .env (CWD 무관)
-_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
-load_dotenv(_env_path)
+# ENV=development → .env.development, ENV=production → .env.production (없으면 .env)
+_env = os.getenv("ENV", "development")
+_root = Path(__file__).resolve().parent.parent.parent
+_env_file = _root / f".env.{_env}"
+if _env_file.exists():
+    load_dotenv(_env_file)
+else:
+    load_dotenv(_root / ".env")
+
 
 class Settings:
     # 서버 설정
@@ -25,7 +31,7 @@ class Settings:
     SESSION_EXPIRY_TIME: int = int(os.getenv("SESSION_EXPIRY_TIME", "86400"))
     SESSION_CLEANUP_INTERVAL: int = int(os.getenv("SESSION_CLEANUP_INTERVAL", "3600"))
     COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "false").lower() == "true"
-    # Rate limit (인메모리, 워커별)
+    # Rate limit
     RATE_LIMIT_WINDOW: int = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
     RATE_LIMIT_MAX_REQUESTS: int = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "100"))
     LOGIN_RATE_LIMIT_WINDOW: int = int(os.getenv("LOGIN_RATE_LIMIT_WINDOW", "60"))

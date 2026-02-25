@@ -73,10 +73,5 @@ class UserProfileResponse(BaseModel):
     id: int = Field(serialization_alias="userId")
     email: str
     nickname: str
-    profile_image_url: str = Field(serialization_alias="profileImageUrl", default="")
+    profile_image_url: Optional[str] = Field(default=None, serialization_alias="profileImageUrl")
     created_at: datetime = Field(serialization_alias="createdAt")
-
-    @field_validator("profile_image_url", mode="before")
-    @classmethod
-    def empty_str_if_none(cls, v):
-        return (v or "").strip() or ""

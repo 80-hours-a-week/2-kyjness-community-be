@@ -31,28 +31,21 @@ class PostUpdateRequest(BaseModel):
 
 
 class AuthorInfo(BaseModel):
+    model_config = {"from_attributes": True}
+
     id: int = Field(serialization_alias="userId")
     nickname: str
-    profile_image_url: str = Field(serialization_alias="profileImageUrl", default="")
-
-    @field_validator("profile_image_url", mode="before")
-    @classmethod
-    def empty_str_if_none(cls, v):
-        return (v or "").strip() or ""
+    profile_image_url: Optional[str] = Field(default=None, serialization_alias="profileImageUrl")
 
 
 class FileInfo(BaseModel):
     id: int = Field(serialization_alias="fileId")
-    file_url: str = Field(serialization_alias="fileUrl", default="")
+    file_url: Optional[str] = Field(default=None, serialization_alias="fileUrl")
     image_id: Optional[int] = Field(default=None, serialization_alias="imageId")
-
-    @field_validator("file_url", mode="before")
-    @classmethod
-    def empty_str_if_none(cls, v):
-        return (v or "").strip() or ""
 
 
 class PostListQuery(BaseModel):
+    """목록 쿼리. 추후 필터/정렬/검색 기능 추가 시 필드 확장용. 라우터에서는 현재 Query()로 직접 받음."""
     page: int = Field(1, ge=1, description="페이지 번호")
     size: int = Field(10, ge=1, le=100, description="페이지 크기 (기본 10, 최대 100)")
 
@@ -68,18 +61,6 @@ class PostListResponse(BaseModel):
     files: List[FileInfo] = Field(default_factory=list)
     created_at: datetime = Field(serialization_alias="createdAt")
 
-    @classmethod
-    def from_rows(cls, post_row: dict, file_rows: List[dict], author_row: dict, preview_length: int = 100) -> "PostListResponse":
-        content = (post_row.get("content") or "").strip()
-        content_preview = content[:preview_length] if len(content) > preview_length else content
-        data = {
-            **post_row,
-            "content_preview": content_preview,
-            "author": author_row,
-            "files": (file_rows or [])[:1],
-        }
-        return cls.model_validate(data)
-
 
 class PostResponse(BaseModel):
     id: int = Field(serialization_alias="postId")
@@ -91,12 +72,3 @@ class PostResponse(BaseModel):
     author: AuthorInfo
     files: List[FileInfo] = Field(default_factory=list)
     created_at: datetime = Field(serialization_alias="createdAt")
-
-    @classmethod
-    def from_rows(cls, post_row: dict, file_rows: List[dict], author_row: dict) -> "PostResponse":
-        data = {
-            **post_row,
-            "author": author_row,
-            "files": (file_rows or [])[:5],
-        }
-        return cls.model_validate(data)

@@ -1,8 +1,23 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import text, bindparam
-from sqlalchemy.orm import Session
+from sqlalchemy import select, update, String, Integer, DateTime
+from sqlalchemy.orm import Session, mapped_column
+
+from app.core.database import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    email = mapped_column(String(255), unique=True, nullable=False)
+    password = mapped_column(String(999), nullable=False)
+    nickname = mapped_column(String(255), unique=True, nullable=False)
+    profile_image_url = mapped_column(String(999), nullable=True)
+    created_at = mapped_column(DateTime, nullable=False)
+    updated_at = mapped_column(DateTime, nullable=False)
+    deleted_at = mapped_column(DateTime, nullable=True)
 
 
 class UsersModel:
@@ -10,89 +25,78 @@ class UsersModel:
     @classmethod
     def create_user(cls, email: str, hashed_password: str, nickname: str, profile_image_url: Optional[str] = None, *, db: Session) -> dict:
         profile = profile_image_url if profile_image_url else ""
-        db.execute(
-            text("INSERT INTO users (email, password, nickname, profile_image_url) VALUES (:email, :pw, :nick, :profile)"),
-            {"email": email.lower(), "pw": hashed_password, "nick": nickname, "profile": profile},
+        now = datetime.now()
+        user = User(
+            email=email.lower(),
+            password=hashed_password,
+            nickname=nickname,
+            profile_image_url=profile or None,
+            created_at=now,
+            updated_at=now,
+            deleted_at=None,
         )
-        user_id = db.execute(text("SELECT LAST_INSERT_ID()")).scalar()
-        return {"id": user_id, "email": email, "nickname": nickname, "profile_image_url": profile, "created_at": datetime.now()}
+        db.add(user)
+        db.flush()
+        return {"id": user.id, "email": email, "nickname": nickname, "profile_image_url": profile, "created_at": now}
+
+    @classmethod
+    def _row_to_dict(cls, row: User, *, include_password: bool = False) -> dict:
+        d = {
+            "id": row.id,
+            "email": row.email,
+            "nickname": row.nickname,
+            "profile_image_url": row.profile_image_url or "",
+            "created_at": row.created_at,
+        }
+        if include_password:
+            d["password"] = row.password
+        return d
 
     @classmethod
     def find_user_by_id(cls, user_id: int, db: Session) -> Optional[dict]:
-        row = db.execute(
-            text("SELECT id, email, nickname, profile_image_url, created_at FROM users WHERE id = :uid AND deleted_at IS NULL"),
-            {"uid": user_id},
-        ).mappings().fetchone()
-        return dict(row) if row else None
+        row = db.execute(select(User).where(User.id == user_id, User.deleted_at.is_(None))).scalar_one_or_none()
+        return cls._row_to_dict(row) if row else None
 
     @classmethod
     def find_users_by_ids(cls, user_ids: List[int], db: Session) -> dict[int, dict]:
-        """N+1 방지: 여러 user_id를 한 번에 조회해 id -> user dict 매핑 반환."""
         if not user_ids:
             return {}
-        stmt = text(
-            "SELECT id, email, nickname, profile_image_url, created_at FROM users WHERE id IN :ids AND deleted_at IS NULL"
-        ).bindparams(bindparam("ids", expanding=True))
-        rows = db.execute(stmt, {"ids": user_ids}).mappings().fetchall()
-        return {int(r["id"]): dict(r) for r in rows}
+        rows = db.execute(select(User).where(User.id.in_(user_ids), User.deleted_at.is_(None))).scalars().all()
+        return {r.id: cls._row_to_dict(r) for r in rows}
 
     @classmethod
     def find_user_by_email(cls, email: str, db: Session) -> Optional[dict]:
-        row = db.execute(
-            text("SELECT id, email, password, nickname, profile_image_url, created_at FROM users WHERE email = :email AND deleted_at IS NULL"),
-            {"email": email.lower()},
-        ).mappings().fetchone()
-        return dict(row) if row else None
+        row = db.execute(select(User).where(User.email == email.lower(), User.deleted_at.is_(None))).scalar_one_or_none()
+        return cls._row_to_dict(row, include_password=True) if row else None
 
     @classmethod
     def get_password_hash(cls, user_id: int, db: Session) -> Optional[str]:
-        row = db.execute(
-            text("SELECT password FROM users WHERE id = :uid AND deleted_at IS NULL"),
-            {"uid": user_id},
-        ).mappings().fetchone()
-        return row["password"] if row and row.get("password") else None
+        return db.execute(select(User.password).where(User.id == user_id, User.deleted_at.is_(None))).scalar_one_or_none()
 
     @classmethod
     def email_exists(cls, email: str, db: Session) -> bool:
-        row = db.execute(
-            text("SELECT 1 FROM users WHERE email = :email AND deleted_at IS NULL LIMIT 1"),
-            {"email": email.lower()},
-        ).mappings().fetchone()
-        return row is not None
+        return db.execute(select(User.id).where(User.email == email.lower(), User.deleted_at.is_(None)).limit(1)).first() is not None
 
     @classmethod
     def nickname_exists(cls, nickname: str, db: Session) -> bool:
-        row = db.execute(
-            text("SELECT 1 FROM users WHERE nickname = :nick AND deleted_at IS NULL LIMIT 1"),
-            {"nick": nickname},
-        ).mappings().fetchone()
-        return row is not None
+        return db.execute(select(User.id).where(User.nickname == nickname, User.deleted_at.is_(None)).limit(1)).first() is not None
 
     @classmethod
     def update_nickname(cls, user_id: int, new_nickname: str, db: Session) -> bool:
-        result = db.execute(
-            text("UPDATE users SET nickname = :nick WHERE id = :uid AND deleted_at IS NULL"),
-            {"nick": new_nickname, "uid": user_id},
-        )
-        return result.rowcount > 0
+        r = db.execute(update(User).where(User.id == user_id, User.deleted_at.is_(None)).values(nickname=new_nickname))
+        return r.rowcount > 0
 
     @classmethod
     def update_password(cls, user_id: int, hashed_password: str, db: Session) -> bool:
-        result = db.execute(
-            text("UPDATE users SET password = :pw WHERE id = :uid AND deleted_at IS NULL"),
-            {"pw": hashed_password, "uid": user_id},
-        )
-        return result.rowcount > 0
+        r = db.execute(update(User).where(User.id == user_id, User.deleted_at.is_(None)).values(password=hashed_password))
+        return r.rowcount > 0
 
     @classmethod
     def update_profile_image_url(cls, user_id: int, profile_image_url: str, db: Session) -> bool:
-        result = db.execute(
-            text("UPDATE users SET profile_image_url = :url WHERE id = :uid AND deleted_at IS NULL"),
-            {"url": profile_image_url, "uid": user_id},
-        )
-        return result.rowcount > 0
+        r = db.execute(update(User).where(User.id == user_id, User.deleted_at.is_(None)).values(profile_image_url=profile_image_url))
+        return r.rowcount > 0
 
     @classmethod
     def withdraw_user(cls, user_id: int, db: Session) -> bool:
-        result = db.execute(text("UPDATE users SET deleted_at = NOW() WHERE id = :uid"), {"uid": user_id})
-        return result.rowcount > 0
+        r = db.execute(update(User).where(User.id == user_id).values(deleted_at=datetime.now()))
+        return r.rowcount > 0

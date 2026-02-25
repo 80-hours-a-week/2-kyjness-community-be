@@ -5,9 +5,13 @@ from urllib.parse import quote_plus
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import settings
+
+
+class Base(DeclarativeBase):
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +26,6 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def get_db() -> Generator[Session, None, None]:
-    """요청 단위 DB 세션. yield 뒤 성공 시 commit, 예외 시 rollback (세션 스코프 패턴).
-    controller는 비즈니스 로직만, commit/rollback은 여기서 일괄 처리."""
     db = SessionLocal()
     try:
         yield db
@@ -37,7 +39,6 @@ def get_db() -> Generator[Session, None, None]:
 
 @contextmanager
 def get_connection():
-    """백그라운드 스레드용 (세션 정리 등). 요청 범위 아님."""
     db = SessionLocal()
     try:
         yield db
@@ -50,7 +51,11 @@ def get_connection():
 
 
 def init_database() -> bool:
-    """서버 시작 시 DB 연결 체크."""
+    return check_database()
+
+
+def check_database() -> bool:
+    """DB 연결 가능 여부만 확인 (health check / 로드밸런서용)."""
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1")).fetchone()
@@ -61,5 +66,4 @@ def init_database() -> bool:
 
 
 def close_database() -> None:
-    """연결 풀 종료."""
     engine.dispose()

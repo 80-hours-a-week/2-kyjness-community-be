@@ -6,9 +6,19 @@ from pydantic import BaseModel, ConfigDict
 from app.core.codes import ApiCode
 
 
+def _serialize_data(data: Any) -> Any:
+    if isinstance(data, BaseModel):
+        return data.model_dump(by_alias=True)
+    if isinstance(data, list):
+        return [_serialize_data(x) for x in data]
+    if isinstance(data, dict):
+        return {k: _serialize_data(v) for k, v in data.items()}
+    return data
+
+
 def success_response(code: Union[str, ApiCode], data=None) -> dict:
     code_str = code.value if isinstance(code, ApiCode) else code
-    return {"code": code_str, "data": data}
+    return {"code": code_str, "data": _serialize_data(data) if data is not None else data}
 
 
 def raise_http_error(status_code: int, error_code: Union[str, ApiCode], message: Optional[str] = None) -> None:

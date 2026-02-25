@@ -36,21 +36,11 @@ class LoginResponse(BaseModel):
     id: int = Field(serialization_alias="userId")
     email: str
     nickname: str
-    profile_image_url: str = Field(serialization_alias="profileImageUrl", default="")
-
-    @field_validator("profile_image_url", mode="before")
-    @classmethod
-    def empty_str_if_none(cls, v):
-        return (v or "").strip() or ""
+    profile_image_url: Optional[str] = Field(default=None, serialization_alias="profileImageUrl")
 
 
 class SessionUserResponse(BaseModel):
     id: int = Field(serialization_alias="userId")
     email: str
     nickname: str
-    profile_image_url: str = Field(serialization_alias="profileImageUrl", default="")
-
-    @field_validator("profile_image_url", mode="before")
-    @classmethod
-    def empty_str_if_none(cls, v):
-        return (v or "").strip() or ""
+    profile_image_url: Optional[str] = Field(default=None, serialization_alias="profileImageUrl")

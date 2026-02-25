@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class CommentUpsertRequest(BaseModel):
@@ -11,12 +11,7 @@ class CommentUpsertRequest(BaseModel):
 class CommentAuthorInfo(BaseModel):
     id: int = Field(serialization_alias="userId")
     nickname: str
-    profile_image_url: str = Field(serialization_alias="profileImageUrl", default="")
-
-    @field_validator("profile_image_url", mode="before")
-    @classmethod
-    def empty_str_if_none(cls, v):
-        return (v or "").strip() or ""
+    profile_image_url: Optional[str] = Field(default=None, serialization_alias="profileImageUrl")
 
 
 class CommentResponse(BaseModel):
@@ -25,12 +20,3 @@ class CommentResponse(BaseModel):
     author: CommentAuthorInfo
     created_at: datetime = Field(serialization_alias="createdAt")
     post_id: Optional[int] = Field(default=None, serialization_alias="postId")
-
-    @classmethod
-    def from_rows(cls, comment_row: dict, author_row: dict, post_id: Optional[int] = None) -> "CommentResponse":
-        data = {
-            **comment_row,
-            "author": author_row,
-            "post_id": post_id or comment_row.get("post_id"),
-        }
-        return cls.model_validate(data)

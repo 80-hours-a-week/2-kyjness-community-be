@@ -10,7 +10,6 @@ from app.core.storage import storage_save
 
 MAX_FILE_SIZE = settings.MAX_FILE_SIZE
 
-# purpose 기반: 용도별 키 prefix. 확장 시 여기에 추가.
 ImagePurpose = Literal["profile", "post"]
 IMAGE_PURPOSES: tuple[ImagePurpose, ...] = ("profile", "post")
 

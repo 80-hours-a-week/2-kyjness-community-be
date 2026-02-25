@@ -1,7 +1,6 @@
 # PuppyTalk API
 
-강아지 커뮤니티 서비스를 위한 백엔드 API 서버입니다.  
-회원가입, 로그인, 이미지 업로드(미디어), 게시글, 댓글, 좋아요 등 커뮤니티 기능을 제공하며, 웹/앱 프론트엔드에서 이 API를 호출해 사용합니다.
+**PuppyTalk**은 반려견을 키우는 사람들을 위한 커뮤니티 서비스의 백엔드입니다. 웹·앱에서 쓰는 REST API 서버를 이 저장소에서 제공하며, 클라이언트가 서버와 통신할 때 사용하는 엔드포인트와 데이터 형식은 아래 개요와 API 문서에서 확인할 수 있습니다.
 
 ---
 
@@ -11,23 +10,25 @@
 
 | 기능 | 설명 |
 |------|------|
-| **인증 (Auth)** | 회원가입(프로필 이미지 ID 지정 가능), 로그인, 로그아웃. 로그인 시 쿠키에 세션 저장, 이후 요청에 쿠키 포함. 비밀번호 bcrypt 암호화. 로그인 API 전용 rate limit(IP당 분당 5회) |
-| **사용자 (Users)** | 프로필 조회·수정, 비밀번호 변경. `/users/me` 경로. 프로필 사진은 미리 미디어 업로드 후 `profileImageId`로 지정 |
-| **미디어 (Media)** | 프로필·게시글용 이미지 업로드. POST `/images` (쿼리 `type=profile`\|`post`) → `imageId`, `url` 반환(201 IMAGE_UPLOADED). 회원가입·프로필 수정·게시글 작성 시 해당 `imageId` 사용. DELETE `/images/{id}`로 본인 업로드 이미지 철회 |
-| **게시글 (Posts)** | 작성·조회·수정·삭제, 이미지 최대 5장 첨부(imageIds). 좋아요 추가·취소. 목록은 무한 스크롤(응답 `hasMore`), 목록 응답은 `contentPreview`·썸네일 1개, 상세는 본문 전체·이미지 최대 5개 |
-| **댓글 (Comments)** | 게시글별 댓글 작성·조회·수정·삭제. 목록은 페이지당 기본 10개(size 쿼리 가능), 응답에 `totalCount`, `totalPages`, `currentPage` |
+| **인증 (Auth)** | 회원가입(프로필 이미지 ID 지정 가능), 로그인, 로그아웃. 로그인 시 세션을 쿠키에 저장하고 이후 요청에 쿠키를 넣어 인증합니다. 비밀번호는 bcrypt로 암호화하며, 로그인 API에는 IP당 분당 5회 rate limit이 적용됩니다. |
+| **사용자 (Users)** | 내 프로필 조회·수정, 비밀번호 변경, 회원 탈퇴. `/users/me` 경로로 본인 정보를 다룹니다. 프로필 사진은 미리 미디어 업로드 후 반환된 `profileImageId`로 지정합니다. 이메일/닉네임 중복 여부는 `/users/availability`로 확인할 수 있습니다. |
+| **미디어 (Media)** | 프로필·게시글용 이미지를 업로드합니다. `POST /images`에 쿼리 `type=profile` 또는 `post`를 주면 `imageId`와 `url`이 반환되고(201), 회원가입·프로필 수정·게시글 작성 시 이 `imageId`를 사용합니다. 본인이 올린 이미지는 `DELETE /images/{id}`로 철회할 수 있습니다. |
+| **게시글 (Posts)** | 게시글 작성·조회·수정·삭제, 이미지 최대 5장 첨부(`imageIds`). 좋아요 추가·취소, 조회수 증가는 상세 진입 시 전용 엔드포인트(`/view`)로 처리합니다. 목록은 무한 스크롤 형식(응답 `hasMore`)이며, 목록에는 요약(`contentPreview`)·썸네일 1개, 상세에는 본문 전체·이미지 최대 5개가 나갑니다. |
+| **댓글 (Comments)** | 게시글별 댓글 작성·조회·수정·삭제. 목록은 페이지 단위(기본 10개, `size` 쿼리 가능)이며, 응답에 `totalCount`, `totalPages`, `currentPage`가 포함됩니다. |
 
 ### 기술 스택
 
 | 구분 | 기술 |
 |------|------|
 | **언어** | Python 3.8+ |
+| **패키지 관리** | Poetry |
 | **프레임워크** | FastAPI |
-| **DB** | MySQL (SQLAlchemy 2.x + pymysql 드라이버) |
+| **DB** | MySQL (pymysql 드라이버) |
+| **ORM** | SQLAlchemy 2.x |
 | **검증** | Pydantic v2 |
 | **암호화** | bcrypt (비밀번호) |
 
-### 설계 배경
+### 설계 포인트
 
 | 선택 | 이유 |
 |------|------|
@@ -41,7 +42,9 @@
 
 ## 폴더 구조
 
-**도메인 폴더(auth, users, media, posts, comments) 공통 역할**
+`app/` 아래는 **도메인별 폴더 구조**로 되어 있습니다. `auth`, `users`, `media`, `posts`, `comments` 각 도메인 폴더가 아래와 같은 역할을 가진 파일들을 갖습니다.
+
+**도메인 폴더 공통 역할**
 
 | 파일 | 역할 |
 |------|------|
@@ -50,7 +53,7 @@
 | **model** | DB 접근 (CRUD, 쿼리) |
 | **schema** | 요청/응답 DTO (Pydantic v2, 검증·alias) |
 
-※ media는 도메인 정책(검증·용도 분기·키 생성)을 위한 `image_policy.py`를 추가로 둠.
+※ media는 도메인 정책(검증·용도 분기·키 생성)을 위한 `image_policy.py`를, posts는 게시글 유효성·존재 검사 등 로직 분리를 위한 `helpers.py`를 추가로 둠.
 
 ```
 2-kyjness-community-be/
@@ -74,9 +77,9 @@
 │   ├── auth/                      # 인증 (router, controller, model, schema)
 │   ├── users/                     # 사용자 (router, controller, model, schema)
 │   ├── media/                     # 미디어 (router, controller, model, schema, image_policy.py)
-│   ├── posts/                     # 게시글 (router, controller, model, schema)
+│   ├── posts/                     # 게시글 (router, controller, model, schema, helpers.py)
 │   ├── comments/                  # 댓글 (router, controller, model, schema)
-│   │
+│
 ├── docs/                          # 문서
 │   ├── puppytalkdb.sql           # 테이블 생성 스크립트
 │   ├── clear_db.sql               # 데이터만 비우기 (테이블 구조 유지)
@@ -87,8 +90,10 @@
 ├── upload/                        # 업로드 파일 저장 (로컬 시, StaticFiles /upload 마운트)
 │   ├── profile/                   # 프로필 이미지 (키 prefix)
 │   └── post/                      # 게시글 이미지 (키 prefix)
-├── pyproject.toml                 # 의존성 (pip install .)
+├── pyproject.toml                 # 의존성 (Poetry)
+├── poetry.lock                    # 의존성 잠금 (커밋 유지)
 ├── .env.example                   # 환경 변수 견본
+├── test/                          # pytest 테스트
 └── README.md
 ```
 
@@ -96,20 +101,7 @@
 
 ## API 문서
 
-서버 실행 후 브라우저에서 아래 주소로 API 문서를 볼 수 있습니다.
-
-```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-| 문서 | 주소 (로컬 실행 시) |
-|------|---------------------|
-| Swagger UI | http://localhost:8000/docs |
-| ReDoc | http://localhost:8000/redoc |
-
-**모든 API는 `/v1` prefix를 사용합니다.** 프론트엔드에서는 베이스 URL을 `http://localhost:8000/v1`로 두고 호출하면 됩니다.
-
-도메인별 API 구성은 다음과 같습니다.
+모든 API는 **`/v1` prefix**를 사용합니다. 도메인별 구성은 아래와 같습니다.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -161,6 +153,16 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 └────────┴────────────────────────────────────────────────────────────────┘
 ```
 
+**문서 보기**: 서버 실행 후 브라우저에서 아래 주소로 확인할 수 있습니다.
+
+| 문서 | 주소 (로컬 실행 시) |
+|------|---------------------|
+| **Swagger UI** | http://localhost:8000/docs |
+| **ReDoc** | http://localhost:8000/redoc |
+
+서버 실행 예: `uvicorn main:app --reload --host 0.0.0.0 --port 8000`  
+프론트엔드 베이스 URL: `http://localhost:8000/v1`
+
 ---
 
 ## 전체 흐름
@@ -173,13 +175,17 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 │  백엔드 (FastAPI)                                                     │
 │                                                                      │
 │  ① Lifespan (앱 시작 시 1회)                                          │
-│     → init_database()로 DB 연결 확인. 만료 세션 정리(시작 1회 + 주기 백그라운드). 종료 시 close_database() │
+│     → init_database()로 DB 연결 확인. 만료 세션 정리(시작 1회 + 주기 백그라운드). 종료 시 shutdown_event로 │
+│       정리 스레드 종료 후 close_database() (graceful shutdown)         │
 │                                                                      │
-│  ② 미들웨어 (요청마다, 마지막 등록된 것부터 실행: CORS → 보안헤더 → access_log → rate_limit) │
-│     → CORSMiddleware: Origin 검사, allow_credentials=True (쿠키 전송 허용) │
-│     → add_security_headers: X-Frame-Options, X-Content-Type-Options   │
-│     → access_log: 4xx/5xx 시 Method, Path, Status, 소요 시간 로깅 (DEBUG 시 X-Process-Time) │
+│  GET /health  → DB ping. 성공 시 200, 실패 시 503 (로드밸런서·배포 검사용) │
+│                                                                      │
+│  ② 미들웨어 (요청마다, 바깥→안: CORS → 보안헤더 → access_log → rate_limit → request_id) │
+│     → request_id: X-Request-ID 생성/전달, 응답 헤더·4xx/5xx 로그에 포함 (추적용) │
 │     → rate_limit: IP당 요청 수 제한, 초과 시 429. 로그인 API는 별도 check_login_rate_limit (IP당 분당 5회) │
+│     → access_log: 4xx/5xx 시 request_id, Method, Path, Status, 소요 시간 로깅 (DEBUG 시 X-Process-Time) │
+│     → add_security_headers: X-Frame-Options, X-Content-Type-Options   │
+│     → CORSMiddleware: Origin 검사, allow_credentials=True (쿠키 전송 허용) │
 │                                                                      │
 │  ③ 라우터 매칭                                                        │
 │     → URL·HTTP 메서드별 분기. /v1/media, /v1/auth, /v1/users, /v1/posts, /v1/posts/.../comments 등 │
@@ -190,7 +196,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 │     → require_post_author / require_comment_author: 게시글·댓글 수정/삭제 시 작성자 본인 여부 확인 │
 │                                                                      │
 │  ⑤ Pydantic (Schema)                                                  │
-│     → 요청 body·쿼리(PostListQuery 등)를 DTO로 검증. 실패 시 400 + code │
+│     → 요청 body·쿼리를 DTO로 검증. 실패 시 400 + code                     │
 │                                                                      │
 │  ⑥ Route 핸들러                                                       │
 │     → auth.controller.signup_user(), posts.controller.create_post() 등 호출│
@@ -199,7 +205,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 │     → 비즈니스 로직·예외만. commit/rollback은 get_db(세션 스코프)에서 담당   │
 │                                                                      │
 │  ⑧ Model                                                              │
-│     → Depends(get_db)로 받은 Session 사용, db.execute()만. commit 없음     │
+│     → Depends(get_db)로 받은 Session 사용, db.execute()만. commit 없음. 게시글 목록·상세는 joinedload로 N+1 방지 │
 │                                                                      │
 │  ⑨ 예외 핸들러 (전역)                                                 │
 │     → RequestValidationError, HTTPException, DB 예외 → { code, data } 통일│
@@ -217,37 +223,41 @@ HTTP 응답  { "code": "POST_UPLOADED", "data": { "postId": 1 } }
 ### 1. 사전 준비
 
 - **Python 3.8 이상** 설치
-- **MySQL** 설치·실행 후 `puppytalk` DB 생성 및 테이블 생성
+- **MySQL** 설치·실행 후 DB 생성 및 테이블 생성:
 
 ```bash
 mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS puppytalk;"
 mysql -u root -p puppytalk < docs/puppytalkdb.sql
 ```
 
-DDL은 `docs/puppytalkdb.sql`을 참고합니다. **데이터만 비우기**(테이블 구조 유지)가 필요하면 `docs/clear_db.sql`을 실행하면 됩니다.  
-애플리케이션은 **SQLAlchemy**로 MySQL에 접근합니다. 요청마다 `get_db()`가 세션을 주입하고, 성공 시 commit·예외 시 rollback을 처리합니다.  
-`likes` 테이블은 `(post_id, user_id)` UNIQUE(로그인 유저만 좋아요)이며, 중복 좋아요 시 IntegrityError로 처리됩니다.  
-스키마는 위 SQL 파일로 관리하며, 마이그레이션 도구(Alembic)는 사용하지 않습니다. 스키마 변경이 잦아지거나 운영 DB 보존이 필요하면 Alembic 도입을 검토하면 됩니다.
+| 항목 | 설명 |
+|------|------|
+| DDL | `docs/puppytalkdb.sql` 참고. 테이블 생성 스크립트. |
+| 데이터만 비우기 | 테이블 구조는 유지하고 데이터만 삭제할 때 `docs/clear_db.sql` 실행. |
+| DB 접근 | SQLAlchemy로 MySQL 접근. 요청마다 `get_db()`가 세션 주입, 성공 시 commit·예외 시 rollback. |
+| likes 테이블 | `(post_id, user_id)` UNIQUE. 로그인 유저만 좋아요, 중복 시 IntegrityError 처리. |
+| 마이그레이션 | 스키마는 SQL 파일로 관리. Alembic 미사용. 변경이 잦거나 운영 DB 보존이 필요하면 Alembic 검토. |
 
-### 2. 가상환경 및 패키지
+### 2. 가상환경 및 패키지 (Poetry)
+
+[Poetry](https://python-poetry.org/)로 의존성 관리. 미설치 시 `pip install poetry` 후 사용.
 
 ```bash
 cd 2-kyjness-community-be
-python -m venv venv
-
-# 활성화
-# Windows CMD:        venv\Scripts\activate
-# Windows PowerShell: .\venv\Scripts\Activate.ps1
-# Git Bash:           source venv/Scripts/activate
-
-pip install .
+poetry install
 ```
 
-테스트까지 포함: `pip install ".[dev]"`
+테스트·개발 도구 포함: `poetry install --with dev`  
+서버 실행: `poetry run uvicorn main:app --reload --host 0.0.0.0 --port 8000`
 
 ### 3. 환경 변수
 
-앱은 루트의 **`.env`** 하나만 읽습니다. **`.env.example`**을 복사해 `.env`로 저장한 뒤 값을 채우면 됩니다. 환경 변수(포트, DB, CORS, S3·파일 저장 등) 상세는 **`.env.example`** 주석을 참고하면 됩니다.
+앱은 **`ENV`** 값에 따라 `.env.development` 또는 `.env.production`을 로드합니다. `ENV`가 없으면 기본 `development`이며, 해당 파일이 없을 때만 `.env`를 로드합니다.
+
+- **로컬 개발**: `.env.example`을 참고해 `.env.development`를 만들고 값을 채운 뒤, 서버 실행 시 `ENV=development`(기본값)로 동작합니다.
+- **배포**: `.env.production`을 서버에 두고 `ENV=production`으로 실행합니다.
+
+환경 변수(포트, DB, CORS, S3·파일 저장 등) 상세는 **`.env.example`** 주석을 참고하면 됩니다.
 
 ### 4. 서버 실행
 
@@ -258,6 +268,24 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 프로덕션/Docker에서는 Gunicorn + Uvicorn worker 사용을 권장합니다. Docker 이미지는 루트의 **Dockerfile** 참고.
 
+**테스트 실행**: `poetry install --with dev` 후 `poetry run pytest test/ -v`. (MySQL·env 설정된 상태에서 동작. test/ 아래 health, auth, users, media, posts, comments 도메인별로 전 구간 검증.)
+
+### 5. Docker Compose로 실행
+
+docker-compose 파일을 **상위 폴더**로 옮긴 뒤 실행. 백엔드 서비스는 이 폴더의 **`.env.production`** 을 참조함. compose 파일이 **2개 이상**이면 `docker compose`만 쓰면 **기본 `docker-compose.yml`만** 사용되고, 나머지는 올라가지 않음. 각각 쓰려면 `-f` 로 파일 지정.
+
+```bash
+# 기본 (docker-compose.yml만 사용)
+docker compose up -d
+docker compose up --build -d   # 빌드 필요 시
+docker compose stop  # 정지
+
+# 다른 파일로 실행 (예: docker-compose.ec2.yml)
+docker compose -f docker-compose.ec2.yml up -d
+docker compose -f docker-compose.ec2.yml stop
+```
+
+옮길 때 `build.context`, `volumes` 경로는 이 폴더 기준으로 수정.
 ---
 
 ## 확장 전략

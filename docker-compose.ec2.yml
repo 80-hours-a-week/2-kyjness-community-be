@@ -1,0 +1,89 @@
+# PuppyTalk / kyjness-community - EC2 운영용 Docker Compose
+# - 도메인 없이 EC2 퍼블릭 IP로 접속, 외부 노출 포트 80만 사용
+# - nginx: 80 → / 는 frontend, /v1·/docs·/redoc·/openapi.json 은 backend
+# 사용: .env 에 MYSQL_ROOT_PASSWORD, DB_PASSWORD 등 설정 후
+#       docker compose -f docker-compose.ec2.yml up -d
+# 빌드: docker compose -f docker-compose.ec2.yml up --build -d
+
+name: puppytalk
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: puppytalk-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - puppytalk-net
+
+  mysql:
+    image: mysql:8.0
+    container_name: puppytalk-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME:-puppytalk}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./2-kyjness-community-be/docs/puppytalkdb.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - puppytalk-net
+
+  backend:
+    image: kyjness/puppytalk-backend:latest
+    build:
+      context: ./2-kyjness-community-be
+      dockerfile: Dockerfile
+    container_name: puppytalk-backend
+    restart: unless-stopped
+    env_file:
+      - ./2-kyjness-community-be/.env
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-puppytalk}
+      # BE_API_URL: nginx reverse proxy 사용 시 불필요 (필요 시 .env에서만 설정)
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+    volumes:
+      - backend_upload:/app/upload
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - puppytalk-net
+
+  frontend:
+    image: kyjness/puppytalk-frontend:latest
+    build:
+      context: ./2-kyjness-community-fe
+      dockerfile: Dockerfile
+      args:
+        API_BASE_URL: /v1
+    container_name: puppytalk-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - puppytalk-net
+
+volumes:
+  mysql_data:
+  backend_upload:
+
+networks:
+  puppytalk-net:
+    driver: bridge

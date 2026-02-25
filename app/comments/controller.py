@@ -37,10 +37,20 @@ def get_comments(post_id: int, page: int, size: int, db: Session) -> dict:
 
     result = []
     for row in rows:
-        comment_row = {"id": row["id"], "post_id": row["post_id"], "author_id": row["author_id"], "content": row["content"], "created_at": row["created_at"]}
-        author_row = {"id": row["author_user_id"], "nickname": row["author_nickname"], "profile_image_url": (row.get("author_profile_image_url") or "").strip() or ""}
-        item = CommentResponse.from_rows(comment_row, author_row, post_id=post_id).model_dump(by_alias=True)
-        result.append(item)
+        payload = {
+            "id": row["id"],
+            "post_id": row["post_id"],
+            "author_id": row["author_id"],
+            "content": row["content"],
+            "created_at": row["created_at"],
+            "author": {
+                "id": row["author_user_id"],
+                "nickname": row["author_nickname"],
+                "profile_image_url": row.get("author_profile_image_url"),
+            },
+            "post_id": post_id,
+        }
+        result.append(CommentResponse.model_validate(payload).model_dump(by_alias=True))
     payload = {"list": result, "totalCount": total_count, "totalPages": total_pages, "currentPage": page}
     return success_response(ApiCode.COMMENTS_RETRIEVED, payload)
 

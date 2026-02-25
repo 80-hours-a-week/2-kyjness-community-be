@@ -6,20 +6,16 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import CurrentUser
 from app.core.response import raise_http_error, success_response
 from app.core.codes import ApiCode
-from app.media.model import MediaModel
+from app.posts.helpers import ensure_image_ids_exist, ensure_post_exists, post_valid_files
 from app.posts.model import PostLikesModel, PostsModel
-from app.posts.schema import PostCreateRequest, PostUpdateRequest, PostResponse, PostListResponse
-from app.users.model import UsersModel
+from app.posts.schema import PostCreateRequest, PostUpdateRequest, PostResponse, PostListResponse, AuthorInfo
 
 logger = logging.getLogger(__name__)
 
 
 def create_post(user: CurrentUser, data: PostCreateRequest, db: Session) -> dict:
     try:
-        if data.image_ids:
-            for iid in data.image_ids:
-                if MediaModel.get_url_by_id(iid, db=db) is None:
-                    raise_http_error(400, ApiCode.INVALID_REQUEST)
+        ensure_image_ids_exist(data.image_ids, db)
         post_id = PostsModel.create_post(user.id, data.title, data.content, data.image_ids, db=db)
         return success_response(ApiCode.POST_UPLOADED, {"postId": post_id})
     except HTTPException:
@@ -30,58 +26,47 @@ def create_post(user: CurrentUser, data: PostCreateRequest, db: Session) -> dict
 
 
 def get_posts(page: int, size: int, db: Session) -> dict:
-    posts_with_files, has_more = PostsModel.get_all_posts(page, size, db=db)
-    if not posts_with_files:
+    posts, has_more = PostsModel.get_all_posts(page, size, db=db)
+    if not posts:
         return success_response(ApiCode.POSTS_RETRIEVED, {"list": [], "hasMore": has_more})
-    user_ids = list({post_row["user_id"] for post_row, _ in posts_with_files})
-    authors_by_id = UsersModel.find_users_by_ids(user_ids, db=db)
     result = []
-    for post_row, file_rows in posts_with_files:
-        author = authors_by_id.get(post_row["user_id"])
-        if author:
-            result.append(
-                PostListResponse.from_rows(post_row, file_rows, author).model_dump(by_alias=True)
-            )
+    for post in posts:
+        if not post.user or post.user.deleted_at is not None:
+            continue
+        content = (post.content or "").strip()
+        content_preview = content[:100] if len(content) > 100 else content
+        result.append(PostListResponse(id=post.id, title=post.title, content_preview=content_preview, view_count=post.view_count, like_count=post.like_count, comment_count=post.comment_count, author=AuthorInfo.model_validate(post.user), files=post_valid_files(post, 1), created_at=post.created_at))
     return success_response(ApiCode.POSTS_RETRIEVED, {"list": result, "hasMore": has_more})
 
 
 def record_post_view(post_id: int, db: Session) -> None:
-    if PostsModel.find_post_by_id(post_id, db=db) is None:
-        raise_http_error(404, ApiCode.POST_NOT_FOUND)
+    ensure_post_exists(post_id, db)
     PostsModel.increment_view_count(post_id, db=db)
 
 
 def get_post(post_id: int, db: Session) -> dict:
-    found = PostsModel.find_post_by_id(post_id, db=db)
-    if not found:
-        raise_http_error(404, ApiCode.POST_NOT_FOUND)
-    post_row, file_rows = found
-    author = UsersModel.find_user_by_id(post_row["user_id"], db=db)
-    if not author:
+    post = ensure_post_exists(post_id, db)
+    if not post.user or post.user.deleted_at is not None:
         raise_http_error(404, ApiCode.USER_NOT_FOUND)
-    data = PostResponse.from_rows(post_row, file_rows, author).model_dump(by_alias=True)
+    data = PostResponse(id=post.id, title=post.title, content=post.content, view_count=post.view_count, like_count=post.like_count, comment_count=post.comment_count, author=AuthorInfo.model_validate(post.user), files=post_valid_files(post, 5), created_at=post.created_at)
     return success_response(ApiCode.POST_RETRIEVED, data)
 
 
 def update_post(post_id: int, data: PostUpdateRequest, db: Session) -> dict:
-    if PostsModel.find_post_by_id(post_id, db=db) is None:
-        raise_http_error(404, ApiCode.POST_NOT_FOUND)
-    if data.image_ids is not None:
-        for iid in data.image_ids:
-            if MediaModel.get_url_by_id(iid, db=db) is None:
-                raise_http_error(400, ApiCode.INVALID_REQUEST)
+    ensure_post_exists(post_id, db)
+    ensure_image_ids_exist(data.image_ids, db)
     PostsModel.update_post(post_id, title=data.title, content=data.content, image_ids=data.image_ids, db=db)
     return success_response(ApiCode.POST_UPDATED)
 
 
 def withdraw_post(post_id: int, db: Session) -> None:
+    ensure_post_exists(post_id, db)
     if not PostsModel.withdraw_post(post_id, db=db):
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
 
 
 def add_like(post_id: int, user: CurrentUser, db: Session) -> tuple[dict, int]:
-    if PostsModel.find_post_by_id(post_id, db=db) is None:
-        raise_http_error(404, ApiCode.POST_NOT_FOUND)
+    ensure_post_exists(post_id, db)
     like = PostLikesModel.add_like(post_id, user.id, db=db)
     if like:
         like_count = PostsModel.increment_like_count(post_id, db=db)
@@ -91,8 +76,7 @@ def add_like(post_id: int, user: CurrentUser, db: Session) -> tuple[dict, int]:
 
 
 def remove_like(post_id: int, user: CurrentUser, db: Session) -> dict:
-    if PostsModel.find_post_by_id(post_id, db=db) is None:
-        raise_http_error(404, ApiCode.POST_NOT_FOUND)
+    ensure_post_exists(post_id, db)
     if not PostLikesModel.remove_like(post_id, user.id, db=db):
         raise_http_error(404, ApiCode.LIKE_NOT_FOUND)
     like_count = PostsModel.decrement_like_count(post_id, db=db)

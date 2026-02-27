@@ -14,7 +14,7 @@ def run_once() -> None:
     try:
         from app.media.model import MediaModel
         with get_connection() as db:
-            MediaModel.cleanup_expired_signup_images(db, ttl_seconds=settings.SIGNUP_IMAGE_TOKEN_TTL_SECONDS)
+            MediaModel.cleanup_expired_signup_images(db)
     except Exception as e:
         logging.getLogger(__name__).warning("Signup image cleanup failed: %s", e)
 

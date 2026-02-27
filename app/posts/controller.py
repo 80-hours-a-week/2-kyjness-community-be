@@ -75,19 +75,15 @@ def add_like(post_id: int, user: CurrentUser, db: Session) -> tuple[dict, int]:
     post = PostsModel.find_post_by_id(post_id, db=db)
     if not post:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
-    added = PostLikesModel.add_like(post_id, user.id, db=db)
-    if added is None:
-        like_count = PostsModel.get_like_count(post_id, db=db)
-        return success_response(ApiCode.ALREADY_LIKED, {"likeCount": like_count}), 200
+    PostLikesModel.add_like(post_id, user.id, db=db)
     like_count = PostsModel.increment_like_count(post_id, db=db)
     return success_response(ApiCode.POSTLIKE_UPLOADED, {"likeCount": like_count}), 201
 
 
-def remove_like(post_id: int, user: CurrentUser, db: Session) -> dict:
+def remove_like(post_id: int, user: CurrentUser, db: Session) -> None:
     post = PostsModel.find_post_by_id(post_id, db=db)
     if not post:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
-    if not PostLikesModel.remove_like(post_id, user.id, db=db):
-        raise_http_error(404, ApiCode.LIKE_NOT_FOUND)
-    like_count = PostsModel.decrement_like_count(post_id, db=db)
-    return success_response(ApiCode.LIKE_DELETED, {"likeCount": like_count})
+    removed = PostLikesModel.remove_like(post_id, user.id, db=db)
+    if removed:
+        PostsModel.decrement_like_count(post_id, db=db)

@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import select, update
@@ -48,6 +48,7 @@ class MediaModel:
             uploader_id=uploader_id,
             signup_token_hash=signup_token_hash,
             signup_expires_at=signup_expires_at,
+            created_at=datetime.now(),
         )
         db.add(img)
         db.flush()
@@ -106,14 +107,19 @@ class MediaModel:
     def withdraw_by_url(cls, file_url: str, db: Session) -> bool:
         if not file_url or not file_url.strip():
             return False
-        row = db.execute(select(Image.file_key).where(Image.file_url == file_url.strip(), Image.deleted_at.is_(None))).scalar_one_or_none()
-        if not row:
+        file_key = db.execute(select(Image.file_key).where(Image.file_url == file_url.strip(), Image.deleted_at.is_(None))).scalar_one_or_none()
+        if not file_key:
             return False
-        try:
-            storage_delete(row)
-        except Exception:
-            pass
-        r = db.execute(update(Image).where(Image.file_url == file_url.strip(), Image.deleted_at.is_(None)).values(deleted_at=datetime.now()))
+        r = db.execute(
+            update(Image)
+            .where(Image.file_url == file_url.strip(), Image.deleted_at.is_(None))
+            .values(deleted_at=datetime.now())
+        )
+        if r.rowcount > 0:
+            try:
+                storage_delete(file_key)
+            except Exception:
+                pass
         return r.rowcount > 0
 
     @classmethod
@@ -153,8 +159,8 @@ class MediaModel:
         return (file_url, None)
 
     @classmethod
-    def cleanup_expired_signup_images(cls, db: Session, ttl_seconds: int = 3600) -> int:
-        """만료된 회원가입용 이미지 스토리지 삭제 후 soft-delete. 삭제 건수 반환."""
+    def cleanup_expired_signup_images(cls, db: Session) -> int:
+        """만료된 회원가입용 이미지: 먼저 DB soft-delete 후 스토리지 삭제(롤백 시 고아 파일 방지)."""
         now = datetime.now()
         rows = db.execute(
             select(Image.id, Image.file_key).where(
@@ -165,10 +171,13 @@ class MediaModel:
                 Image.deleted_at.is_(None),
             )
         ).all()
-        for (img_id, file_key) in rows:
+        if not rows:
+            return 0
+        ids = [r[0] for r in rows]
+        db.execute(update(Image).where(Image.id.in_(ids)).values(deleted_at=now))
+        for (_, file_key) in rows:
             try:
                 storage_delete(file_key)
             except Exception:
                 pass
-            db.execute(update(Image).where(Image.id == img_id).values(deleted_at=now))
         return len(rows)

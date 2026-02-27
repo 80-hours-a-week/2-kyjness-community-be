@@ -5,6 +5,7 @@ from fastapi import UploadFile
 
 from app.core.config import settings
 from app.common import ApiCode, raise_http_error
+from app.common.validators import normalize_image_content_type
 from app.core.storage import storage_save
 
 MAX_FILE_SIZE = settings.MAX_FILE_SIZE
@@ -17,7 +18,11 @@ async def _validate_image(file: Optional[UploadFile], allowed_types: List[str], 
     if not file:
         raise_http_error(400, ApiCode.MISSING_REQUIRED_FIELD)
 
-    if file.content_type not in allowed_types:
+    normalized = normalize_image_content_type(file.content_type)
+    allowed_set = set(allowed_types)
+    if "image/jpeg" in allowed_set:
+        allowed_set |= {"image/jpg", "image/pjpeg"}
+    if normalized not in allowed_set:
         raise_http_error(400, ApiCode.INVALID_FILE_TYPE)
 
     content = await file.read()
@@ -50,8 +55,8 @@ async def save_image_for_media(file: Optional[UploadFile], purpose: ImagePurpose
         purpose = "post"
     types = allowed_types or settings.ALLOWED_IMAGE_TYPES
     content = await _validate_image(file, allowed_types=types, max_size=max_size)
-    ext = _safe_extension(file.filename if file else None, file.content_type or "")
-    ct = file.content_type or "image/jpeg"
+    ct = normalize_image_content_type(file.content_type if file else None)
+    ext = _safe_extension(file.filename if file else None, ct)
     key = _generate_key(purpose, ext)
     url = storage_save(key, content, ct)
     return key, url, ct, len(content)

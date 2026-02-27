@@ -6,6 +6,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.common import ApiCode
+from app.core.database import get_connection
+from app.posts.model import PostsModel
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +82,17 @@ def register_exception_handlers(app: FastAPI) -> None:
                 return JSONResponse(status_code=409, content={"code": ApiCode.EMAIL_ALREADY_EXISTS.value, "data": None})
             if "nickname" in msg_lower or "key 'nickname'" in msg_lower:
                 return JSONResponse(status_code=409, content={"code": ApiCode.NICKNAME_ALREADY_EXISTS.value, "data": None})
+            parts = request.url.path.rstrip("/").split("/")
+            if "posts" in parts and "likes" in parts:
+                try:
+                    idx = parts.index("posts")
+                    if idx + 1 < len(parts) and parts[idx + 1].isdigit():
+                        post_id = int(parts[idx + 1])
+                        with get_connection() as db:
+                            like_count = PostsModel.get_like_count(post_id, db=db)
+                        return JSONResponse(status_code=200, content={"code": ApiCode.ALREADY_LIKED.value, "data": {"likeCount": like_count}})
+                except (ValueError, IndexError):
+                    pass
             return JSONResponse(status_code=409, content={"code": ApiCode.CONFLICT.value, "data": None})
         if errno in (1451, 1452):
             return JSONResponse(status_code=409, content={"code": ApiCode.CONSTRAINT_ERROR.value, "data": None})

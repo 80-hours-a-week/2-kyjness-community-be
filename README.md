@@ -1,7 +1,7 @@
-# PuppyTalk API
+# PuppyTalk Backend
 
-**PuppyTalk**는 반려견을 키우는 사람들을 위한 커뮤니티 서비스의 백엔드 REST API 서버입니다.
-사용자는 회원가입·로그인 후 게시글 작성, 댓글, 좋아요, 이미지 업로드 기능을 이용할 수 있습니다.
+**PuppyTalk**는 반려견을 키우는 사람들을 위한 커뮤니티 서비스의 백엔드로, **RESTful API**에 기반하여 설계·구현된 서버입니다.
+회원가입·로그인, 게시글 작성·댓글·좋아요, 이미지 업로드 등 커뮤니티 운영에 필요한 핵심 기능을 제공합니다.
 
 ---
 
@@ -86,7 +86,7 @@
 │   └── api-codes.md               # API 응답 code·HTTP 매핑 (내부 참고)
 │
 ├── main.py                        # 앱 진입점
-├── Dockerfile                     # 프로덕션 Docker 이미지 (Gunicorn + Uvicorn)
+├── Dockerfile                     # 프로덕션 이미지 (멀티스테이지, 비루트 USER, 시크릿 런타임 주입, .dockerignore)
 ├── upload/                        # 업로드 파일 저장 (로컬 시, StaticFiles /upload 마운트)
 │   ├── profile/                   # 프로필 이미지 (키 prefix)
 │   └── post/                      # 게시글 이미지 (키 prefix)
@@ -141,7 +141,7 @@
 │  PATCH │  /{post_id}          게시글 수정 (imageIds 최대 5개)             │
 │  DELETE│  /{post_id}          게시글 삭제                                 │
 │  POST  │  /{post_id}/likes    좋아요 추가 (201 새로 추가, 200 이미 있음)   │
-│  DELETE│  /{post_id}/likes    좋아요 취소                                 │
+│  DELETE│  /{post_id}/likes    좋아요 취소 (204)                          │
 └────────┴────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -265,9 +265,27 @@ poetry run uvicorn main:app --reload --host 0.0.0.0 --port 8000
 - 프로덕션: Gunicorn + Uvicorn worker 권장. **Dockerfile** 참고.
 - 테스트: `poetry run pytest test/ -v` (MySQL·env 설정 필요).
 
-### 5. Docker Compose로 실행
+### 5. Docker 이미지 빌드 및 실행
 
-- compose 파일을 이 프로젝트 **한 단계 위 폴더**에 두고 아래 실행. 백엔드는 이 폴더 `.env.production` 참조.
+이미지는 **멀티스테이지 빌드**, **비루트 사용자(USER appuser)**, **.dockerignore**로 최소 복사, **시크릿/환경변수는 런타임 주입**을 사용합니다.
+
+```bash
+# 빌드
+docker build -t puppytalk-be .
+
+# 실행 (DB·시크릿은 -e 또는 --env-file 로 외부 주입, 이미지에 넣지 않음)
+docker run -d -p 8000:8000 \
+  -e ENV=production \
+  -e DATABASE_URL="mysql+pymysql://user:pass@host:3306/puppytalk" \
+  --name puppytalk-be puppytalk-be
+```
+
+- 포트: `8000` 노출 → 호스트에서는 `-p 8000:8000` 사용.
+- 환경 변수: `.env.production` 내용을 `-e` 또는 `--env-file`로 전달. 상세는 `.env.example` 참고.
+
+### 6. Docker Compose로 실행
+
+- compose 파일을 이 프로젝트 **한 단계 위 폴더**에 두고 아래 실행. 백엔드는 이 폴더 `.env.production`(또는 동일한 환경 변수) 참조.
 - 파일 여러 개일 때: `docker compose -f docker-compose.ec2.yml up -d` 처럼 `-f`로 지정.
 
 ```bash

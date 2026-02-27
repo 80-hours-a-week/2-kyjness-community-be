@@ -53,11 +53,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.middleware("http")(security_headers_middleware)
-app.middleware("http")(rate_limit_middleware)
-app.middleware("http")(access_log_middleware)
-app.middleware("http")(request_id_middleware)
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -65,6 +60,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.middleware("http")(security_headers_middleware)
+app.middleware("http")(rate_limit_middleware)
+app.middleware("http")(access_log_middleware)
+app.middleware("http")(request_id_middleware)
 
 register_exception_handlers(app)
 

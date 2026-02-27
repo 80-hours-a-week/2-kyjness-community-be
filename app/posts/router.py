@@ -53,6 +53,7 @@ def add_like(post_id: int = Path(..., ge=1, description="게시글 ID"), user: C
     return JSONResponse(content=result, status_code=status_code)
 
 
-@router.delete("/{post_id}/likes", status_code=200)
+@router.delete("/{post_id}/likes", status_code=204)
 def remove_like(post_id: int = Path(..., ge=1, description="게시글 ID"), user: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    return controller.remove_like(post_id=post_id, user=user, db=db)
+    controller.remove_like(post_id=post_id, user=user, db=db)
+    return Response(status_code=204)

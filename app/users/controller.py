@@ -34,10 +34,10 @@ def update_me(user: CurrentUser, data: UpdateUserRequest, db: Session) -> dict:
     if data.nickname is not None and not UsersModel.update_nickname(user.id, data.nickname, db=db):
         raise_http_error(500, ApiCode.INTERNAL_SERVER_ERROR)
     if profile_image_url is not None:
-        if user.profile_image_url:
-            MediaModel.withdraw_by_url(user.profile_image_url, db=db)
         if not UsersModel.update_profile_image_url(user.id, profile_image_url, db=db):
             raise_http_error(500, ApiCode.INTERNAL_SERVER_ERROR)
+        if user.profile_image_url:
+            MediaModel.withdraw_by_url(user.profile_image_url, db=db)
     return success_response(ApiCode.USER_UPDATED)
 
 

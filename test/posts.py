@@ -188,11 +188,11 @@ def test_remove_like_success(client, auth_cookies):
     post_id = create.json()["data"]["postId"]
     client.post(f"/v1/posts/{post_id}/likes", cookies=auth_cookies)
     res = client.delete(f"/v1/posts/{post_id}/likes", cookies=auth_cookies)
-    assert res.status_code == 200
-    assert res.json()["code"] == "LIKE_DELETED"
+    assert res.status_code == 204
 
 
 def test_remove_like_when_not_liked(client, auth_cookies):
+    """이미 좋아요 없을 때 DELETE → 멱등하게 204"""
     create = client.post(
         "/v1/posts",
         json={"title": "No like", "content": "x"},
@@ -200,5 +200,4 @@ def test_remove_like_when_not_liked(client, auth_cookies):
     )
     post_id = create.json()["data"]["postId"]
     res = client.delete(f"/v1/posts/{post_id}/likes", cookies=auth_cookies)
-    assert res.status_code == 404
-    assert res.json()["code"] == "LIKE_NOT_FOUND"
+    assert res.status_code == 204

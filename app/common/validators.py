@@ -1,7 +1,18 @@
 import re
+from typing import Optional
 
 PASSWORD_SPECIAL = re.compile(r"[!@#$%^&*()_+\-=\[\]{};\':\"\\|,.<>/?]")
 NICKNAME_PATTERN = re.compile(r"^[가-힣a-zA-Z0-9]{1,10}$")
+
+
+def normalize_image_content_type(ct: Optional[str]) -> str:
+    """이미지 업로드 시 브라우저/환경별 content_type 통일. 빈 값·jpeg 별칭 허용."""
+    if not (ct or "").strip():
+        return "image/jpeg"
+    ct = (ct or "").strip().lower()
+    if ct in ("image/jpg", "image/pjpeg"):
+        return "image/jpeg"
+    return ct
 
 
 def validate_password_format(password: str) -> bool:

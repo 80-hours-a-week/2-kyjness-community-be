@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import select, update, delete, func
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, relationship, joinedload, mapped_column
 from sqlalchemy import String, Integer, Text, DateTime, ForeignKey
 
@@ -180,18 +179,12 @@ class PostsModel:
 class PostLikesModel:
     @classmethod
     def add_like(cls, post_id: int, user_id: int, *, db: Session) -> Optional[dict]:
-        try:
-            now = datetime.now()
-            like = Like(post_id=post_id, user_id=user_id, created_at=now)
-            db.add(like)
-            db.flush()
-            return {"post_id": post_id, "user_id": user_id}
-        except IntegrityError:
-            db.expunge(like)
-            return None
-        except Exception as e:
-            logger.exception("likes INSERT 실패: %s", e)
-            raise
+        """INSERT 시도. (post_id, user_id) 유니크 위반 시 IntegrityError 상위 전파(전역 핸들러에서 200 ALREADY_LIKED 반환)."""
+        now = datetime.now()
+        like = Like(post_id=post_id, user_id=user_id, created_at=now)
+        db.add(like)
+        db.flush()
+        return {"post_id": post_id, "user_id": user_id}
 
     @classmethod
     def remove_like(cls, post_id: int, user_id: int, db: Session) -> bool:

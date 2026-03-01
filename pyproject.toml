@@ -1,37 +1,39 @@
-[project]
+[tool.poetry]
 name = "puppytalk-api"
 version = "1.0.0"
 description = "FastAPI 기반의 커뮤니티 백엔드 API 서버"
+authors = ["kyjness <kyjness@naver.com>"]
 readme = "README.md"
-requires-python = ">=3.8"
-license = {text = "MIT"}
+license = "MIT"
 keywords = ["fastapi", "api", "community", "backend"]
-dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.24.0",
-    "pydantic>=2.10.0",
-    "pydantic[email]>=2.10.0",
-    "python-dotenv==1.0.0",
-    "bcrypt==4.1.2",
-    "sqlalchemy>=2.0.0",
-    "pymysql>=1.1.0",
-    "cryptography>=41.0.0",  # MySQL caching_sha2_password 인증 지원 (MySQL 8+)
-    "python-multipart>=0.0.6",  # File(), Form() 사용 시 필수 (multipart/form-data 파싱)
-    "boto3>=1.28.0",  # S3 업로드 (STORAGE_BACKEND=s3 시)
-    "gunicorn>=21.0.0",  # 프로덕션 서버 (uvicorn worker 사용)
-    "redis>=5.0.0",  # Rate limit 분산 (REDIS_URL 설정 시)
-]
+packages = [{ include = "app" }]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-    "pytest-asyncio>=0.21.0",
-    "httpx>=0.24.0",  # TestClient용
-]
+[tool.poetry.dependencies]
+python = "^3.8"
+fastapi = ">=0.115.0"
+uvicorn = { extras = ["standard"], version = ">=0.24.0" }
+pydantic = { version = ">=2.10.0", extras = ["email"] }
+python-dotenv = "1.0.0"
+bcrypt = "4.1.2"
+sqlalchemy = ">=2.0.0"
+pymysql = ">=1.1.0"
+cryptography = ">=41.0.0"
+python-multipart = ">=0.0.6"
+boto3 = ">=1.28.0"
+gunicorn = ">=21.0.0"
+redis = ">=5.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=7.0.0"
+pytest-asyncio = ">=0.21.0"
+httpx = ">=0.24.0"
+alembic = ">=1.13.0"
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
 
-[tool.setuptools]
-packages = ["app"]
+[tool.pytest.ini_options]
+testpaths = ["test"]
+pythonpath = ["."]
+python_files = ["*.py"]

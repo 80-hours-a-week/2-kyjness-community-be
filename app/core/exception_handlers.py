@@ -1,3 +1,4 @@
+# 전역 예외 핸들러. RequestValidationError, HTTPException, DB 예외 → { code, data } 통일.
 import logging
 
 from fastapi import FastAPI, HTTPException, Request
@@ -5,7 +6,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, OperationalError
 
-from app.core.codes import ApiCode
+from app.common import ApiCode
+from app.db import get_connection
+from app.posts.model import PostsModel
 
 logger = logging.getLogger(__name__)
 
@@ -69,30 +72,46 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={"code": code_str, "data": None},
         )
 
-    # DB 예외: SQLAlchemy가 드라이버(pymysql) 예외를 래핑하므로 sqlalchemy.exc 사용
     @app.exception_handler(IntegrityError)
     async def integrity_error_handler(request: Request, exc: IntegrityError):
+        logger.error(
+            "DB IntegrityError: Path=%s, Exception=%s: %s",
+            request.url.path,
+            type(exc).__name__,
+            str(exc),
+        )
         orig = getattr(exc, "orig", None)
         errno = (orig.args[0] if orig and getattr(orig, "args", None) else 0) or 0
         err_msg = (orig.args[1] if orig and len(getattr(orig, "args", ())) > 1 else str(exc)) or ""
-        # 1062=Duplicate entry (UNIQUE 위반)
         if errno == 1062:
             msg_lower = err_msg.lower() if isinstance(err_msg, str) else ""
             if "email" in msg_lower or "key 'email'" in msg_lower:
                 return JSONResponse(status_code=409, content={"code": ApiCode.EMAIL_ALREADY_EXISTS.value, "data": None})
             if "nickname" in msg_lower or "key 'nickname'" in msg_lower:
                 return JSONResponse(status_code=409, content={"code": ApiCode.NICKNAME_ALREADY_EXISTS.value, "data": None})
+            parts = request.url.path.rstrip("/").split("/")
+            if "posts" in parts and "likes" in parts:
+                try:
+                    idx = parts.index("posts")
+                    if idx + 1 < len(parts) and parts[idx + 1].isdigit():
+                        post_id = int(parts[idx + 1])
+                        with get_connection() as db:
+                            like_count = PostsModel.get_like_count(post_id, db=db)
+                        return JSONResponse(status_code=200, content={"code": ApiCode.ALREADY_LIKED.value, "data": {"likeCount": like_count}})
+                except (ValueError, IndexError):
+                    pass
             return JSONResponse(status_code=409, content={"code": ApiCode.CONFLICT.value, "data": None})
-        if errno in (1451, 1452):  # FK 제약 위반
+        if errno in (1451, 1452):
             return JSONResponse(status_code=409, content={"code": ApiCode.CONSTRAINT_ERROR.value, "data": None})
         return JSONResponse(status_code=400, content={"code": ApiCode.INVALID_REQUEST.value, "data": None})
 
     @app.exception_handler(OperationalError)
     async def operational_error_handler(request: Request, exc: OperationalError):
         logger.error(
-            "DB OperationalError: Path=%s, Exception=%s",
+            "DB OperationalError: Path=%s, Exception=%s: %s",
             request.url.path,
             type(exc).__name__,
+            str(exc),
         )
         return JSONResponse(status_code=500, content={"code": ApiCode.DB_ERROR.value, "data": None})
 

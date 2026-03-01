@@ -1,29 +1,47 @@
-# PuppyTalk API - Docker 이미지 (추후 Docker 배포용)
-FROM python:3.11-slim
+# PuppyTalk API - Docker 이미지
+# 비루트 사용자, 멀티스테이지, 최소 패키지, 시크릿은 런타임 주입
 
-# 작업 디렉터리
+# -----------------------------------------------------------------------------
+# Stage 1: Builder (의존성 설치, 최종 이미지에 포함 안 함)
+# -----------------------------------------------------------------------------
+FROM python:3.11-slim AS builder
+
 WORKDIR /app
 
-# 시스템 의존성 (MySQL 클라이언트 등 필요 시 추가)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# 의존성 먼저 복사 후 설치 (캐시 활용)
-COPY pyproject.toml ./
+ENV POETRY_VERSION=1.8.3
+ENV POETRY_HOME=/opt/poetry
+ENV PATH="$POETRY_HOME/bin:$PATH"
+RUN pip install --no-cache-dir poetry==$POETRY_VERSION
+ENV POETRY_VIRTUALENVS_CREATE=false
+
+COPY pyproject.toml poetry.lock* ./
+RUN poetry install --no-root --no-dev --no-interaction
+
 COPY app/ ./app/
 
-RUN pip install --no-cache-dir .
+# -----------------------------------------------------------------------------
+# Stage 2: Runtime (최소 패키지, 비루트 사용자)
+# -----------------------------------------------------------------------------
+FROM python:3.11-slim AS runtime
 
-# main.py 등 루트 파일 복사
-COPY main.py ./
+WORKDIR /app
 
-# 업로드 디렉터리 (로컬 스토리지 사용 시)
-RUN mkdir -p /app/upload
+# 시크릿/환경변수는 이미지에 넣지 않고 런타임에 -e 또는 외부 설정으로 주입
+RUN groupadd -r appgroup && useradd -r -g appgroup -u 1000 appuser
 
-# 환경 변수는 런타임에 주입 (.env 파일은 이미지에 포함하지 않음)
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /app/app ./app
+
+RUN mkdir -p /app/upload && chown -R appuser:appgroup /app
+
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 
-# 프로덕션: Gunicorn + Uvicorn worker (워커 수·바인딩은 환경에 맞게 조정)
-CMD ["gunicorn", "main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000"]
+USER appuser
+
+CMD ["gunicorn", "app.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000"]

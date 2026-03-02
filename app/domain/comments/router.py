@@ -23,7 +23,7 @@ def create_comment(
 
 
 @router.get("", status_code=200, response_model=ApiResponse)
-def get_comments(
+def get_comments(  # 인증 불필요. 비로그인·다른 유저도 전체 댓글 목록 조회 가능.
     post_id: int = Path(..., ge=1, description="게시글 ID"),
     page: int = Query(1, ge=1, description="페이지 번호"),
     size: int = Query(10, ge=1, le=100, description="페이지 크기"),

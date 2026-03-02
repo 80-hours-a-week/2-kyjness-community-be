@@ -43,19 +43,19 @@ def get_posts(
     for post in posts:
         if not post.user:
             continue
-        result.append(PostResponse.model_validate(post))
+        result.append(PostResponse.model_validate(post).model_dump(by_alias=True))
     return {"code": ApiCode.POSTS_RETRIEVED.value, "data": result, "hasMore": has_more}
 
 
 def record_post_view(post_id: int, db: Session) -> None:
-    post = PostsModel.find_post_by_id(post_id, db=db)
+    post = PostsModel.get_post_by_id(post_id, db=db)
     if not post:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
     PostsModel.increment_view_count(post_id, db=db)
 
 
 def get_post(post_id: int, db: Session) -> dict:
-    post = PostsModel.find_post_by_id(post_id, db=db)
+    post = PostsModel.get_post_by_id(post_id, db=db)
     if not post:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
     if not post.user:
@@ -68,7 +68,7 @@ def update_post(
     data: PostUpdateRequest,
     db: Session,
 ) -> dict:
-    post = PostsModel.find_post_by_id(post_id, db=db)
+    post = PostsModel.get_post_by_id(post_id, db=db)
     if not post:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
     if data.image_ids is not None:
@@ -85,7 +85,7 @@ def delete_post(post_id: int, db: Session) -> None:
 
 
 def add_like(post_id: int, user: CurrentUser, db: Session) -> tuple[dict, int]:
-    post = PostsModel.find_post_by_id(post_id, db=db)
+    post = PostsModel.get_post_by_id(post_id, db=db)
     if not post:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
     PostLikesModel.add_like(post_id, user.id, db=db)
@@ -98,7 +98,7 @@ def delete_like(
     user: CurrentUser,
     db: Session,
 ) -> None:
-    post = PostsModel.find_post_by_id(post_id, db=db)
+    post = PostsModel.get_post_by_id(post_id, db=db)
     if not post:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
     deleted = PostLikesModel.delete_like(post_id, user.id, db=db)

@@ -1,7 +1,7 @@
 # PuppyTalk Backend
 
-**PuppyTalk**는 반려견을 키우는 사람들을 위한 커뮤니티 서비스의 백엔드로, **FastAPI** 기반의의 **RESTful API**로 설계·구현된 서버입니다.
-회원가입·로그인, 게시글 작성·댓글·좋아요, 이미지 업로드 등 커뮤니티 운영에 필요한 핵심 기능을 제공합니다.
+**PuppyTalk**는 반려견을 키우는 사람들을 위한 커뮤니티 서비스의 백엔드로, **FastAPI** 기반의 **RESTful API**로 설계·구현된 서버입니다.
+커뮤니티 운영에 필요한 아래 핵심 기능들을 제공합니다.
 
 - **인증** — 회원가입·로그인·로그아웃 (쿠키 세션)
 - **사용자** — 프로필 조회·수정, 비밀번호 변경
@@ -9,7 +9,8 @@
 - **댓글** — 페이지네이션, 작성자 검증
 - **미디어** — 이미지 업로드 (로컬/S3), 회원가입 전 프로필 첨부
 
-프론트엔드는 별도 프로젝트에서 이 API를 사용합니다. → [**PuppyTalk Frontend**](https://github.com/kyjness/2-kyjness-community-fe)  
+- **프론트엔드**: 별도 프로젝트에서 이 API를 사용합니다. → [**PuppyTalk Frontend**](https://github.com/kyjness/2-kyjness-community-fe)
+- **인프라·배포**: Docker Compose, EC2, Kubernetes 등 배포 정의는 [**PuppyTalk Infra**](https://github.com/kyjness/2-kyjness-community-infra) 레포에서 관리합니다.
 
 ---
 
@@ -31,7 +32,7 @@
 
 ## 폴더 구조
 
-- **루트** — 실행·배포 설정, 테스트·문서. 애플리케이션 코드는 **app/** 패키지에 둡니다.
+- **루트** — 실행·배포 설정, 테스트·문서를 두며, 애플리케이션 코드는 **app/** 패키지에 둡니다.
 - **app/** — 공통·인프라와 기능 단위 **domain**으로 구분합니다.
 - **도메인** — **router**(엔드포인트) → **controller**(비즈니스 로직) → **model**(DB 접근) → **schema**(요청·응답 DTO) 흐름으로 처리합니다.
 
@@ -68,8 +69,6 @@
 ├── pyproject.toml           # Poetry 의존성·스크립트 정의
 ├── poetry.lock              # 의존성 잠금 (poetry install 시 참조)
 ├── Dockerfile               # 프로덕션 이미지 빌드
-├── docker-compose.yml       # 로컬·배포용 Compose
-├── docker-compose.ec2.yml   # EC2 배포용 Compose
 └── .env.example             # 환경 변수 예시 (복사 후 .env.development,.env.production 으로 사용)
 ```
 
@@ -77,8 +76,8 @@
 
 ## API 문서
 
-서버를 실행한 뒤, 브라우저에서 **아래 주소**로 접속하면 API 명세를 볼 수 있습니다.  
-(Swagger UI는 요청 테스트, ReDoc은 읽기용 정리 문서입니다.)
+서버를 실행한 뒤, 브라우저에서 **아래 주소**로 접속하시면 API 명세를 보실 수 있습니다.  
+(Swagger UI는 요청 테스트용, ReDoc은 읽기용 정리 문서입니다.)
 
 | 문서 | 주소 |
 |------|------|
@@ -91,43 +90,40 @@
 
 | 선택 | 이유 |
 |------|------|
-| **무한 스크롤 vs 페이지네이션** | 게시글은 피드형(hasMore). 댓글은 페이지 번호(totalCount, totalPages). |
-| **쿠키-세션** | JWT 대신 쿠키(HttpOnly, SameSite)로 세션 ID만 전달. |
-| **조회수 전용 엔드포인트** | GET 상세는 멱등, 조회수 증가는 POST /view 별도 호출. |
-| **이미지 미리 업로드** | `/media/images/signup`(비로그인) 또는 `/media/images?purpose=profile|post`(로그인) 업로드 후 imageId만 본문에 넣음. |
-| **스토리지: 로컬/S3** | `STORAGE_BACKEND`(local \| S3)로 전환 가능. |
+| **무한 스크롤 vs 페이지네이션** | 게시글은 피드처럼 스크롤로 이어 보는 흐름이 중요해서 무한 스크롤(hasMore). 댓글은 "몇 페이지·총 몇 개" 파악이 중요해서 페이지 번호(totalCount, totalPages)로 두었습니다. |
+| **세션 저장소: MySQL** | Redis 없이 단일 DB로 운영 부담을 줄이려고 합니다. 규모가 커지면 Redis로 바꿀 수 있습니다. |
+| **쿠키-세션 방식** | JWT는 클라이언트에 두면 XSS·CSRF 위험이 커서, 세션 ID만 쿠키(HttpOnly, SameSite)로 주고 서버에서만 검증하려고 합니다. |
+| **로그인 전용 rate limit** | 전역 제한만으로는 로그인 브루트포스에 부족해서, 로그인 API에 IP당 분당 5회로 따로 두었습니다. |
+| **조회수 전용 엔드포인트** | GET 상세는 멱등하게 두고, 조회수 증가는 부수효과라 POST /view로 분리했습니다. |
+| **이미지 미리 업로드** | 본문 제출 전에 먼저 올려두면 실패 시 재시도만 하면 되고, 본문·파일 동시 전송 부담을 줄이려고 합니다. |
+| **스토리지: 로컬/S3** | 개발·소규모는 로컬, 확장 시 S3로 바꿀 수 있게 환경 변수로 전환 가능하게 하려고 합니다. |
 
 ---
 
-## 빠른 실행 (Quick Start)
+## 실행 방법
 
-아래는 **이 프로젝트 폴더(`2-kyjness-community-be`)를 연 터미널에서** 순서대로 진행하면 됩니다.
+**이 프로젝트 폴더(`2-kyjness-community-be`)를 연 터미널에서** 진행합니다.  
+Docker로 실행할 경우 [**인프라 레포(2-kyjness-community-infra)**](https://github.com/kyjness/2-kyjness-community-infra)에서 실행하세요.
 
-1. **사전 준비**  
-   Python 3.8 이상, MySQL이 설치되어 있고 실행 중이어야 합니다.
+---
 
-2. **DB·테이블 준비**  
-   - MySQL에서 `puppytalk` 데이터베이스를 만듭니다.  
-   - 테이블은 다음 중 하나로 만듭니다.  
-     - **Alembic (권장)**: 3번에서 패키지 설치한 뒤, 프로젝트 루트에서  
-       `alembic revision --autogenerate -m "initial"` → `alembic upgrade head`  
-     - **수동**: `mysql -u root -p puppytalk < docs/puppytalkdb.sql`
+### 로컬 실행 (Python + MySQL 직접 설치)
 
-3. **패키지 설치**  
-   프로젝트 루트에서 `poetry install`을 실행합니다.
-
-4. **환경 변수**  
-   `.env.example`을 복사해 `.env.development`로 저장한 뒤, DB 주소·비밀번호 등 필요한 값을 채웁니다.  
-   (`ENV`를 주지 않으면 development 설정을 사용합니다.)
-
-5. **서버 실행**  
-   같은 폴더에서 아래를 실행하면 서버가 뜹니다.  
-   ```bash
-   poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
+1. **사전 준비** — Python 3.8 이상, MySQL 설치·실행 중이어야 합니다.
+2. **DB·테이블** — MySQL에서 `puppytalk` DB 생성 후, 테이블은 아래 중 하나로 만듭니다.
+   - **Alembic (권장)**: 3단계 후 `alembic revision --autogenerate -m "initial"` → `alembic upgrade head`
+   - **수동**: `mysql -u root -p puppytalk < docs/puppytalkdb.sql`
+3. **패키지** — 프로젝트 루트에서 `poetry install`
+4. **환경 변수** — `.env.example`을 복사해 `.env.development`로 저장한 뒤 DB 주소·비밀번호 등 입력. `ENV` 미설정 시 development 로드
+5. **서버** — `poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
 
 - **테스트**: `poetry run pytest test/ -v` (MySQL·환경 변수 필요)
-- Docker·Compose·Alembic 자세한 절차: [docs/deploy.md](docs/deploy.md)
+
+**Alembic** (스키마 변경 시): `alembic revision --autogenerate -m "메시지"` → `alembic upgrade head`. 이미 `docs/puppytalkdb.sql`로 테이블을 만든 경우 `alembic stamp head` 한 번 후 위 흐름으로 변경분만 적용.
+
+---
+
+- Docker 단독 이미지: [인프라 레포 docs/docker.md](https://github.com/kyjness/2-kyjness-community-infra) 참고.
 
 ---
 
@@ -151,6 +147,6 @@
 
 | 문서 | 설명 |
 |------|------|
-| [deploy.md](docs/deploy.md) | Docker 이미지·Compose 실행, 환경 변수 목록, Alembic 마이그레이션 방법 |
 | [architecture.md](docs/architecture.md) | 폴더 역할·요청 흐름·인증 흐름 등 구조 설명 |
 | [api-codes.md](docs/api-codes.md) | API 응답 코드(성공·에러)와 HTTP 상태 코드 매핑 |
+| [puppytalkdb.sql](docs/puppytalkdb.sql) | 참고용 DDL (수동 테이블 생성 시 사용. 스키마 기준은 Alembic 마이그레이션) |

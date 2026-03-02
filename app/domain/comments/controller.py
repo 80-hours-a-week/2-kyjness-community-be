@@ -19,7 +19,7 @@ def create_comment(
     data: CommentUpsertRequest,
     db: Session,
 ) -> dict:
-    post = PostsModel.find_post_by_id(post_id, db=db)
+    post = PostsModel.get_post_by_id(post_id, db=db)
     if not post:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
     try:
@@ -39,7 +39,7 @@ def get_comments(
     size: int,
     db: Session,
 ) -> dict:
-    if PostsModel.find_post_by_id(post_id, db=db) is None:
+    if PostsModel.get_post_by_id(post_id, db=db) is None:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
     comments = CommentsModel.get_comments_by_post_id(post_id, page, size, db=db)
     total_count = CommentsModel.get_comment_count_by_post_id(post_id, db=db)

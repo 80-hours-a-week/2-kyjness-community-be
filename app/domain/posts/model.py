@@ -84,7 +84,7 @@ class PostsModel:
         return post.id
 
     @classmethod
-    def find_post_by_id(cls, post_id: int, db: Session) -> Optional["Post"]:
+    def get_post_by_id(cls, post_id: int, db: Session) -> Optional["Post"]:
         stmt = (
             select(Post)
             .where(Post.id == post_id, Post.deleted_at.is_(None))

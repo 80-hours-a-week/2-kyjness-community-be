@@ -25,7 +25,7 @@ def require_comment_author(
 ) -> CommentAuthorContext:
     if PostsModel.get_post_author_id(post_id, db=db) is None:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
-    comment = CommentsModel.find_comment_by_id(comment_id, db=db)
+    comment = CommentsModel.get_comment_by_id(comment_id, db=db)
     if not comment:
         raise_http_error(404, ApiCode.COMMENT_NOT_FOUND)
     if comment.post_id != post_id:

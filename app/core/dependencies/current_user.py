@@ -32,7 +32,7 @@ def get_current_user(
     user_id = AuthModel.get_user_id_by_session(session_id, db=db)
     if not user_id:
         raise_http_error(401, ApiCode.UNAUTHORIZED)
-    user = UsersModel.find_user_by_id(user_id, db=db)
+    user = UsersModel.get_user_by_id(user_id, db=db)
     if not user:
         raise_http_error(401, ApiCode.UNAUTHORIZED)
     return CurrentUser.model_validate(user)

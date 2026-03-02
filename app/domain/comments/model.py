@@ -34,7 +34,7 @@ class CommentsModel:
         return c
 
     @classmethod
-    def find_comment_by_id(cls, comment_id: int, db: Session) -> Optional[Comment]:
+    def get_comment_by_id(cls, comment_id: int, db: Session) -> Optional[Comment]:
         stmt = (
             select(Comment)
             .where(Comment.id == comment_id, Comment.deleted_at.is_(None))

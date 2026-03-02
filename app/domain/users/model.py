@@ -56,7 +56,7 @@ class UsersModel:
         return user
 
     @classmethod
-    def find_user_by_id(cls, user_id: int, db: Session) -> Optional[User]:
+    def get_user_by_id(cls, user_id: int, db: Session) -> Optional[User]:
         stmt = (
             select(User)
             .where(User.id == user_id, User.deleted_at.is_(None))
@@ -65,7 +65,7 @@ class UsersModel:
         return db.execute(stmt).unique().scalars().one_or_none()
 
     @classmethod
-    def find_users_by_ids(cls, user_ids: List[int], db: Session) -> dict[int, User]:
+    def get_users_by_ids(cls, user_ids: List[int], db: Session) -> dict[int, User]:
         if not user_ids:
             return {}
         stmt = (
@@ -77,7 +77,7 @@ class UsersModel:
         return {r.id: r for r in rows}
 
     @classmethod
-    def find_user_by_email(cls, email: str, db: Session) -> Optional[User]:
+    def get_user_by_email(cls, email: str, db: Session) -> Optional[User]:
         stmt = (
             select(User)
             .where(User.email == email.lower(), User.deleted_at.is_(None))

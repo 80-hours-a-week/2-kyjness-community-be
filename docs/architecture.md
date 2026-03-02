@@ -93,7 +93,6 @@
 │   ├── api-codes.md         # API 응답 code · HTTP 상태 매핑
 │   ├── architecture.md     # 이 문서 (아키텍처·폴더 구조·요청·인증 흐름)
 │   ├── clear_db.sql         # 데이터만 비우기
-│   ├── deploy.md            # Docker·환경 변수·Alembic
 │   └── puppytalkdb.sql      # 참고용 DDL
 ├── test/                    # pytest
 │   ├── auth.py              # 인증 API 테스트
@@ -177,4 +176,3 @@ HTTP 응답  { "code": "...", "data": { ... } }
 
 세션 저장소는 MySQL(`sessions` 테이블).
 
-- **확장 전략**(추가 기능·인프라)은 README의 "확장 전략" 섹션을 참고하면 됩니다. architecture·deploy 문서에는 별도로 적지 않습니다.

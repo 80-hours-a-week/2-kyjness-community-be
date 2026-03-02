@@ -63,7 +63,7 @@ def signup_user(data: SignUpRequest, db: Session) -> dict:
 
 
 def login_user(data: LoginRequest, db: Session) -> tuple[dict, str]:
-    user = UsersModel.find_user_by_email(data.email, db=db)
+    user = UsersModel.get_user_by_email(data.email, db=db)
     if not user:
         raise_http_error(401, ApiCode.EMAIL_NOT_FOUND, "존재하지 않는 이메일입니다")
     if not verify_password(data.password, user.password):

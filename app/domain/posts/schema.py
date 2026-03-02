@@ -1,13 +1,14 @@
 # 게시글 요청/응답 DTO. PostCreateRequest, PostResponse, 피드·상세 스키마.
-from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.common import UtcDatetime
 
 
 class PostCreateRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=26)
-    content: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1, max_length=50_000)
     image_ids: Optional[List[int]] = Field(default=None, max_length=5, validation_alias="imageIds", serialization_alias="imageIds")
 
     @field_validator("image_ids")
@@ -20,7 +21,7 @@ class PostCreateRequest(BaseModel):
 
 class PostUpdateRequest(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=26)
-    content: Optional[str] = Field(default=None, min_length=1)
+    content: Optional[str] = Field(default=None, min_length=1, max_length=50_000)
     image_ids: Optional[List[int]] = Field(default=None, validation_alias="imageIds", serialization_alias="imageIds")
 
     @field_validator("image_ids")
@@ -38,6 +39,18 @@ class AuthorInfo(BaseModel):
     nickname: str
     profile_image_id: Optional[int] = Field(default=None, serialization_alias="profileImageId")
     profile_image_url: Optional[str] = Field(default=None, serialization_alias="profileImageUrl")
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def anonymize_inactive_user(cls, data, handler):
+        if hasattr(data, "is_active") and data.is_active is False:
+            return handler({
+                "id": data.id,
+                "nickname": "알수없음",
+                "profile_image_id": None,
+                "profile_image_url": None,
+            })
+        return handler(data)
 
 
 class FileInfo(BaseModel):
@@ -63,7 +76,7 @@ class PostListResponse(BaseModel):
     comment_count: int = Field(serialization_alias="commentCount", default=0)
     author: AuthorInfo
     files: List[FileInfo] = Field(default_factory=list)
-    created_at: datetime = Field(serialization_alias="createdAt")
+    created_at: UtcDatetime = Field(serialization_alias="createdAt")
 
 
 class PostResponse(BaseModel):
@@ -77,7 +90,7 @@ class PostResponse(BaseModel):
     comment_count: int = Field(serialization_alias="commentCount", default=0)
     author: AuthorInfo
     files: List[FileInfo] = Field(default_factory=list)
-    created_at: datetime = Field(serialization_alias="createdAt")
+    created_at: UtcDatetime = Field(serialization_alias="createdAt")
 
     @field_validator("files", mode="before")
     @classmethod

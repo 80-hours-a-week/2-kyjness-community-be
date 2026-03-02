@@ -1,11 +1,12 @@
 # 이미지 업로드 비즈니스 로직. Model은 Image ORM 반환, Controller에서 Schema로 직렬화.
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.common import ApiCode, raise_http_error, success_response
 from app.core.config import settings
+from app.db import utc_now
 from app.core.dependencies import CurrentUser
 from app.core.storage import storage_delete
 from app.media.model import MediaModel
@@ -18,7 +19,7 @@ async def upload_image_for_signup(file: UploadFile, db: Session) -> dict:
         file, purpose="signup"
     )
     try:
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.SIGNUP_IMAGE_TOKEN_TTL_SECONDS)
+        expires_at = utc_now() + timedelta(seconds=settings.SIGNUP_IMAGE_TOKEN_TTL_SECONDS)
         image, signup_token = MediaModel.create_signup_image(
             file_key=file_key,
             file_url=file_url,

@@ -1,5 +1,5 @@
 # 세션 CRUD. AuthSession 모델, 세션 생성·조회·삭제.
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Optional
 
 import secrets
@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, mapped_column
 from sqlalchemy import String, Integer, DateTime, ForeignKey
 
 from app.core.config import settings
-from app.db import Base, get_connection
+from app.db import Base, get_connection, utc_now
 
 
 class AuthSession(Base):
@@ -26,8 +26,8 @@ class AuthModel:
     @classmethod
     def create_session(cls, user_id: int, db: Session) -> str:
         session_id = secrets.token_urlsafe(32)
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=cls.SESSION_EXPIRY_TIME)
-        now = datetime.now(timezone.utc)
+        now = utc_now()
+        expires_at = now + timedelta(seconds=cls.SESSION_EXPIRY_TIME)
         s = AuthSession(session_id=session_id, user_id=user_id, created_at=now, expires_at=expires_at)
         db.add(s)
         return session_id
@@ -39,7 +39,7 @@ class AuthModel:
         row = db.execute(
             select(AuthSession.user_id).where(
                 AuthSession.session_id == session_id,
-                AuthSession.expires_at > datetime.now(timezone.utc),
+                AuthSession.expires_at > utc_now(),
             )
         ).scalar_one_or_none()
         return row
@@ -58,5 +58,5 @@ class AuthModel:
     @classmethod
     def cleanup_expired_sessions(cls) -> int:
         with get_connection() as db:
-            r = db.execute(delete(AuthSession).where(AuthSession.expires_at <= datetime.now(timezone.utc)))
+            r = db.execute(delete(AuthSession).where(AuthSession.expires_at <= utc_now()))
             return r.rowcount

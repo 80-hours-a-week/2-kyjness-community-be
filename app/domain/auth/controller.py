@@ -1,7 +1,5 @@
 # 인증 비즈니스 로직. 회원가입·로그인·로그아웃·세션 생성.
 import logging
-import hmac
-from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -12,7 +10,7 @@ from app.auth.model import AuthModel
 from app.auth.schema import SignUpRequest, LoginRequest, LoginResponse, SessionUserResponse
 from app.common import ApiCode
 from app.core.dependencies import CurrentUser
-from app.core.security import hash_password, hash_token, verify_password
+from app.core.security import hash_password, verify_password
 from app.common import raise_http_error, success_response
 from app.media.model import MediaModel
 from app.users.model import UsersModel
@@ -29,21 +27,7 @@ def signup_user(data: SignUpRequest, db: Session) -> dict:
         raise_http_error(400, ApiCode.MISSING_REQUIRED_FIELD)
     profile_image_id = None
     if has_image and has_token:
-        image = MediaModel.get_signup_image_for_update(data.profile_image_id, db=db)
-        if image is None:
-            raise_http_error(400, ApiCode.SIGNUP_IMAGE_TOKEN_INVALID)
-        if image.uploader_id is not None:
-            raise_http_error(400, ApiCode.SIGNUP_IMAGE_TOKEN_INVALID)
-        expected_hash = hash_token(data.signup_token)
-        if not hmac.compare_digest(image.signup_token_hash or "", expected_hash):
-            raise_http_error(400, ApiCode.SIGNUP_IMAGE_TOKEN_INVALID)
-        now = datetime.now(timezone.utc)
-        expires_at = image.signup_expires_at
-        if expires_at is None:
-            raise_http_error(400, ApiCode.SIGNUP_IMAGE_TOKEN_INVALID)
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-        if expires_at <= now:
+        if MediaModel.verify_signup_token(data.profile_image_id, data.signup_token, db=db) is None:
             raise_http_error(400, ApiCode.SIGNUP_IMAGE_TOKEN_INVALID)
         profile_image_id = data.profile_image_id
     hashed = hash_password(data.password)
@@ -55,19 +39,16 @@ def signup_user(data: SignUpRequest, db: Session) -> dict:
         db=db,
     )
     if profile_image_id is not None:
-        try:
-            MediaModel.finalize_signup_image(profile_image_id, created.id, db=db)
-        except Exception as exc:
-            logger.warning("finalize_signup_image failed (user already created): %s", exc)
+        MediaModel.attach_signup_image(profile_image_id, created.id, db=db),
     return success_response(ApiCode.SIGNUP_SUCCESS)
 
 
 def login_user(data: LoginRequest, db: Session) -> tuple[dict, str]:
     user = UsersModel.get_user_by_email(data.email, db=db)
     if not user:
-        raise_http_error(401, ApiCode.EMAIL_NOT_FOUND, "존재하지 않는 이메일입니다")
+        raise_http_error(401, ApiCode.INVALID_CREDENTIALS, "이메일 또는 비밀번호가 일치하지 않습니다")
     if not verify_password(data.password, user.password):
-        raise_http_error(401, ApiCode.INVALID_CREDENTIALS)
+        raise_http_error(401, ApiCode.INVALID_CREDENTIALS, "이메일 또는 비밀번호가 일치하지 않습니다")
     session_id = AuthModel.create_session(user.id, db=db)
     payload = LoginResponse.model_validate(user).model_dump(by_alias=True)
     return success_response(ApiCode.LOGIN_SUCCESS, payload), session_id

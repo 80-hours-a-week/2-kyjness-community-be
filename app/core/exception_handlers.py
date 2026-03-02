@@ -27,29 +27,16 @@ HTTP_STATUS_TO_CODE = {
 
 def register_exception_handlers(app: FastAPI) -> None:
     _KNOWN_CODES = frozenset({
-        "INVALID_EMAIL_FORMAT", "INVALID_PASSWORD_FORMAT", "INVALID_NICKNAME_FORMAT",
-        "INVALID_PROFILEIMAGEURL", "INVALID_FILE_URL", "INVALID_REQUEST",
+        "INVALID_REQUEST_BODY", "INVALID_REQUEST", "INVALID_FILE_FORMAT",
         "MISSING_REQUIRED_FIELD", "POST_FILE_LIMIT_EXCEEDED",
     })
 
     def _pick_validation_code(request: Request, errors: list) -> str:
-        is_login = "/auth/login" in request.url.path or request.url.path.endswith("/login")
-        found_codes = []
         for err in errors:
-            loc = err.get("loc", ())
             msg = err.get("msg", "") if isinstance(err.get("msg"), str) else ""
-            if "email" in loc or ("email" in msg.lower() and "valid" in msg.lower()):
-                found_codes.append("INVALID_EMAIL_FORMAT")
             for known in _KNOWN_CODES:
                 if known in msg or msg == known:
-                    found_codes.append(known)
-                    break
-        if is_login:
-            for code in found_codes:
-                if code == "INVALID_EMAIL_FORMAT":
-                    return code
-        for code in found_codes:
-            return code
+                    return known
         return ApiCode.INVALID_REQUEST_BODY.value
 
     @app.exception_handler(RequestValidationError)

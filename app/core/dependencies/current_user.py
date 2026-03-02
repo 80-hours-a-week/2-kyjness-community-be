@@ -1,5 +1,4 @@
 # 쿠키 session_id → 세션 조회 → CurrentUser 반환. get_current_user 의존성.
-from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import Cookie, Depends
@@ -7,8 +6,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.auth.model import AuthModel
-from app.common import ApiCode, raise_http_error
-from app.db import get_db
+from app.common import ApiCode, UtcDatetime, raise_http_error
+from app.db import get_db, utc_now
 from app.users.model import UsersModel
 
 
@@ -18,7 +17,7 @@ class CurrentUser(BaseModel):
     nickname: str = ""
     profile_image_id: Optional[int] = None
     profile_image_url: Optional[str] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: UtcDatetime = Field(default_factory=utc_now)
 
     model_config = {"from_attributes": True}
 

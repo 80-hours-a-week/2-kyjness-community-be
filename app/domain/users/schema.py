@@ -1,10 +1,9 @@
 # 사용자 요청/응답 DTO. UserUpdateRequest, UserResponse, PasswordUpdateRequest 등.
-from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.common import ensure_nickname_format, ensure_password_format
+from app.common import ensure_nickname_format, ensure_password_format, UtcDatetime
 
 
 class UserAvailabilityQuery(BaseModel):
@@ -78,4 +77,4 @@ class UserProfileResponse(BaseModel):
     nickname: str
     profile_image_id: Optional[int] = Field(default=None, serialization_alias="profileImageId")
     profile_image_url: Optional[str] = Field(default=None, serialization_alias="profileImageUrl")
-    created_at: datetime = Field(serialization_alias="createdAt")
+    created_at: UtcDatetime = Field(serialization_alias="createdAt")

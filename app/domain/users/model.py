@@ -1,11 +1,10 @@
 # 사용자 CRUD. User ORM 반환, Controller에서 Schema.model_validate(user)로 직렬화. 프로필 이미지는 profile_image_id(FK).
-from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import select, update, String, Integer, DateTime, ForeignKey
+from sqlalchemy import select, update, String, Integer, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import Session, mapped_column, relationship, joinedload
 
-from app.db import Base
+from app.db import Base, utc_now
 from app.media.model import Image
 
 
@@ -14,9 +13,10 @@ class User(Base):
 
     id = mapped_column(Integer, primary_key=True, autoincrement=True)
     email = mapped_column(String(255), unique=True, nullable=False)
-    password = mapped_column(String(999), nullable=False)
+    password = mapped_column(String(255), nullable=False)
     nickname = mapped_column(String(255), unique=True, nullable=False)
     profile_image_id = mapped_column(Integer, ForeignKey("images.id", ondelete="SET NULL"), nullable=True)
+    is_active = mapped_column(Boolean, nullable=False, default=True)
     created_at = mapped_column(DateTime, nullable=False)
     updated_at = mapped_column(DateTime, nullable=False)
     deleted_at = mapped_column(DateTime, nullable=True)
@@ -41,12 +41,13 @@ class UsersModel:
         *,
         db: Session,
     ) -> User:
-        now = datetime.now(timezone.utc)
+        now = utc_now()
         user = User(
             email=email.lower(),
             password=hashed_password,
             nickname=nickname,
             profile_image_id=profile_image_id,
+            is_active=True,
             created_at=now,
             updated_at=now,
             deleted_at=None,
@@ -114,5 +115,9 @@ class UsersModel:
 
     @classmethod
     def delete_user(cls, user_id: int, db: Session) -> bool:
-        r = db.execute(update(User).where(User.id == user_id).values(deleted_at=datetime.now(timezone.utc)))
+        r = db.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(is_active=False, profile_image_id=None, deleted_at=utc_now())
+        )
         return r.rowcount > 0

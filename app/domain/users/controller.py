@@ -38,7 +38,8 @@ def update_me(
         if not UsersModel.update_profile_image_id(user.id, data.profile_image_id, db=db):
             raise_http_error(500, ApiCode.INTERNAL_SERVER_ERROR)
         if old_id:
-            MediaModel.delete_image_by_owner(old_id, user.id, db=db)
+            MediaModel.decrement_ref_count(old_id, db=db)
+        MediaModel.increment_ref_count(data.profile_image_id, db=db)
     if data.nickname is not None and not UsersModel.update_nickname(user.id, data.nickname, db=db):
         raise_http_error(500, ApiCode.INTERNAL_SERVER_ERROR)
     return success_response(ApiCode.USER_UPDATED)
@@ -59,6 +60,9 @@ def update_password(
 
 
 def delete_me(user: CurrentUser, db: Session) -> None:
+    profile_image_id = user.profile_image_id
     AuthModel.revoke_sessions_for_user(user.id, db=db)
     if not UsersModel.delete_user(user.id, db=db):
         raise_http_error(500, ApiCode.INTERNAL_SERVER_ERROR)
+    if profile_image_id is not None:
+        MediaModel.decrement_ref_count(profile_image_id, db=db)

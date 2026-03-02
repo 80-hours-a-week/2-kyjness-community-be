@@ -1,6 +1,22 @@
 # 닉네임·비밀번호 형식 검증 (ensure_nickname_format, ensure_password_format).
+# DB에서 읽은 naive datetime을 UTC로 해석해 API 응답 시 Z 포함하도록 함.
 import re
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Annotated, Optional
+
+from pydantic import AfterValidator
+
+
+def ensure_utc_datetime(dt: Optional[datetime]) -> Optional[datetime]:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+# 스키마에서 created_at 등에 사용. 매 모델마다 validator 반복 없이 타입만 지정하면 됨.
+UtcDatetime = Annotated[datetime, AfterValidator(ensure_utc_datetime)]
 
 PASSWORD_SPECIAL = re.compile(r"[!@#$%^&*()_+\-=\[\]{};\':\"\\|,.<>/?]")
 NICKNAME_PATTERN = re.compile(r"^[가-힣a-zA-Z0-9]{1,10}$")
@@ -34,13 +50,13 @@ def validate_nickname_format(nickname: str) -> bool:
 
 def ensure_password_format(v: str) -> str:
     if not validate_password_format(v):
-        raise ValueError("INVALID_PASSWORD_FORMAT")
+        raise ValueError("INVALID_REQUEST_BODY")
     return v
 
 
 def ensure_nickname_format(v: str) -> str:
     if not v or not v.strip():
-        raise ValueError("INVALID_NICKNAME_FORMAT")
+        raise ValueError("INVALID_REQUEST_BODY")
     if not validate_nickname_format(v.strip()):
-        raise ValueError("INVALID_NICKNAME_FORMAT")
+        raise ValueError("INVALID_REQUEST_BODY")
     return v.strip()

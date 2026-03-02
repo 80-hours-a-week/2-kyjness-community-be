@@ -1,12 +1,11 @@
 # 댓글 CRUD. Comment ORM 반환, Controller/매퍼에서 Schema로 직렬화.
-from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy import select, update, func
 from sqlalchemy.orm import Session, mapped_column, relationship, joinedload
 from sqlalchemy import Integer, Text, DateTime, ForeignKey
 
-from app.db import Base
+from app.db import Base, utc_now
 from app.users.model import User
 
 
@@ -27,7 +26,7 @@ class Comment(Base):
 class CommentsModel:
     @classmethod
     def create_comment(cls, post_id: int, user_id: int, content: str, db: Session) -> Comment:
-        now = datetime.now(timezone.utc)
+        now = utc_now()
         c = Comment(post_id=post_id, author_id=user_id, content=content, created_at=now, updated_at=now, deleted_at=None)
         db.add(c)
         db.flush()
@@ -54,8 +53,7 @@ class CommentsModel:
         offset = (page - 1) * size
         stmt = (
             select(Comment)
-            .join(User, Comment.author_id == User.id)
-            .where(Comment.post_id == post_id, Comment.deleted_at.is_(None), User.deleted_at.is_(None))
+            .where(Comment.post_id == post_id, Comment.deleted_at.is_(None))
             .options(joinedload(Comment.author).joinedload(User.profile_image))
             .order_by(Comment.id.desc())
             .limit(size)
@@ -68,8 +66,7 @@ class CommentsModel:
         stmt = (
             select(func.count(Comment.id))
             .select_from(Comment)
-            .join(User, Comment.author_id == User.id)
-            .where(Comment.post_id == post_id, Comment.deleted_at.is_(None), User.deleted_at.is_(None))
+            .where(Comment.post_id == post_id, Comment.deleted_at.is_(None))
         )
         row = db.execute(stmt).scalar()
         return row or 0
@@ -79,7 +76,7 @@ class CommentsModel:
         r = db.execute(
             update(Comment)
             .where(Comment.id == comment_id, Comment.post_id == post_id, Comment.deleted_at.is_(None))
-            .values(content=content, updated_at=datetime.now(timezone.utc))
+            .values(content=content, updated_at=utc_now())
         )
         return r.rowcount
 
@@ -88,6 +85,6 @@ class CommentsModel:
         r = db.execute(
             update(Comment)
             .where(Comment.id == comment_id, Comment.post_id == post_id, Comment.deleted_at.is_(None))
-            .values(deleted_at=datetime.now(timezone.utc))
+            .values(deleted_at=utc_now())
         )
         return r.rowcount > 0

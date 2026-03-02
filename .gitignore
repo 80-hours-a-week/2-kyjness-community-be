@@ -50,7 +50,8 @@ upload/
 .AppleDouble
 .LSOverride
 
-# Windows
+# Windows (nul, con, prn 등 예약 이름 실수 방지)
+nul
 Thumbs.db
 ehthumbs.db
 Desktop.ini

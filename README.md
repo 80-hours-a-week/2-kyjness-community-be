@@ -90,13 +90,10 @@
 
 | 선택 | 이유 |
 |------|------|
-| **무한 스크롤 vs 페이지네이션** | 게시글은 피드처럼 스크롤로 이어 보는 흐름이 중요해서 무한 스크롤(hasMore). 댓글은 "몇 페이지·총 몇 개" 파악이 중요해서 페이지 번호(totalCount, totalPages)로 두었습니다. |
-| **세션 저장소: MySQL** | Redis 없이 단일 DB로 운영 부담을 줄이려고 합니다. 규모가 커지면 Redis로 바꿀 수 있습니다. |
-| **쿠키-세션 방식** | JWT는 클라이언트에 두면 XSS·CSRF 위험이 커서, 세션 ID만 쿠키(HttpOnly, SameSite)로 주고 서버에서만 검증하려고 합니다. |
-| **로그인 전용 rate limit** | 전역 제한만으로는 로그인 브루트포스에 부족해서, 로그인 API에 IP당 분당 5회로 따로 두었습니다. |
-| **조회수 전용 엔드포인트** | GET 상세는 멱등하게 두고, 조회수 증가는 부수효과라 POST /view로 분리했습니다. |
-| **이미지 미리 업로드** | 본문 제출 전에 먼저 올려두면 실패 시 재시도만 하면 되고, 본문·파일 동시 전송 부담을 줄이려고 합니다. |
-| **스토리지: 로컬/S3** | 개발·소규모는 로컬, 확장 시 S3로 바꿀 수 있게 환경 변수로 전환 가능하게 하려고 합니다. |
+| **무한 스크롤 vs 페이지네이션** | 탐색 중심의 게시글 피드는 무한 스크롤로 몰입감을 높이고, 참조가 중요한 댓글은 페이지네이션을 적용해 정보 접근성을 최적화했습니다. |
+| **쿠키-세션 방식** | 현재 프로젝트가 웹 기반 커뮤니티라는 점에 집중하여, 별도의 토큰 관리 오버헤드가 있는 JWT보다 브라우저 보안 인프라를 그대로 활용할 수 있는 쿠키-세션 방식이 더 효율적이라고 판단했습니다. JWT는 다양한 플랫폼(앱/외부 API) 확장 시 유리하지만, 단일 웹 서비스에서는 서버 측에서 즉시 세션을 제어할 수 있는 세션 방식이 보안과 운영 효율 면에서 더 우위에 있습니다. |
+| **조회수 전용 엔드포인트** | GET의 멱등성을 유지하고, 조회수 어뷰징 방지 로직을 독립적으로 관리하기 위해 POST 엔드포인트로 분리했습니다. |
+| **이미지 (업로드·회원가입·생명주기)** | **(1) 미리 업로드**: 파일 처리를 비동기화해 DB 트랜잭션 점유를 줄이고, 본문 작성 실패 시에도 리소스 재사용이 가능한 구조로 두었습니다. **(2) 회원가입·signupToken**: 가입 전에는 계정이 없어 프로필 이미지는 uploader_id 없이 저장됩니다. 가입 시 해당 이미지를 이 사용자 소유로 묶을 때, 업로드 시에만 발급된 **signupToken**으로 검증해, imageId만 아는 제3자가 남의 이미지를 가로채는 것을 막고 소유 증명을 합니다. **(3) 생명주기(Reference Counting)**: ref_count로 참조 수를 관리하고, 0이 되면 삭제하는 즉시 처리 방식을 쓰며, 향후 비동기 배치(Batch GC) 전환 확장을 고려했습니다. |
 
 ---
 
@@ -110,16 +107,28 @@ Docker로 실행할 경우 [**인프라 레포(2-kyjness-community-infra)**](htt
 ### 로컬 실행 (Python + MySQL 직접 설치)
 
 1. **사전 준비** — Python 3.8 이상, MySQL 설치·실행 중이어야 합니다.
-2. **DB·테이블** — MySQL에서 `puppytalk` DB 생성 후, 테이블은 아래 중 하나로 만듭니다.
-   - **Alembic (권장)**: 3단계 후 `alembic revision --autogenerate -m "initial"` → `alembic upgrade head`
-   - **수동**: `mysql -u root -p puppytalk < docs/puppytalkdb.sql`
-3. **패키지** — 프로젝트 루트에서 `poetry install`
-4. **환경 변수** — `.env.example`을 복사해 `.env.development`로 저장한 뒤 DB 주소·비밀번호 등 입력. `ENV` 미설정 시 development 로드
-5. **서버** — `poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
+2. **DB 생성** — MySQL에서 `puppytalk` DB를 만들어 둡니다.
+   ```bash
+   mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS puppytalk CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+   ```
+3. **패키지** — 프로젝트 루트(`2-kyjness-community-be`)에서 `poetry install`
+4. **환경 변수** — `.env.example`을 복사해 `.env.development`로 저장한 뒤 DB 주소·비밀번호 등 입력. (`ENV` 미설정 시 development 로드)
+5. **테이블 만들기** — 아래 **방법 A** 또는 **방법 B** 중 하나만 하면 됩니다.
+   - **방법 A) Alembic으로 적용 (권장)**  
+     레포에 들어 있는 마이그레이션을 그대로 적용합니다. **프로젝트 루트에서** 실행하세요.
+     ```bash
+     `poetry run alembic upgrade head`
+     ```
+   - **방법 B) SQL 파일로 한 번에 생성**  
+     테이블을 수동으로 만들 때 사용합니다.
+     ```bash
+     `mysql -u root -p puppytalk < docs/puppytalkdb.sql`
+     ```
+     이후 Alembic이 “이미 최신 상태”로 인식하게 하려면 한 번만 실행:  
+     `poetry run alembic stamp head`
+6. **서버 실행** — `poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
 
 - **테스트**: `poetry run pytest test/ -v` (MySQL·환경 변수 필요)
-
-**Alembic** (스키마 변경 시): `alembic revision --autogenerate -m "메시지"` → `alembic upgrade head`. 이미 `docs/puppytalkdb.sql`로 테이블을 만든 경우 `alembic stamp head` 한 번 후 위 흐름으로 변경분만 적용.
 
 ---
 
@@ -135,6 +144,7 @@ Docker로 실행할 경우 [**인프라 레포(2-kyjness-community-infra)**](htt
 - **신고/차단**: 게시글 신고, 사용자 차단 (차단한 사람 글 숨김)
 - **알림**: 내 글에 댓글 달리면 알림 리스트
 - **관리자**: 신고 누적 글 숨김, 유저 제재 (ROLE 기반)
+- **비밀번호 찾기·이메일 인증** (Future Scope): 이메일 재설정 링크 발송, 가입 시 이메일 인증 — 현재 미구현, 추후 도입 시 auth·users 도메인 확장 예정
 
 ### 인프라 (규모 확대 시)
 

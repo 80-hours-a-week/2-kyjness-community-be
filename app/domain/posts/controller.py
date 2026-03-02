@@ -90,7 +90,7 @@ def add_like(post_id: int, user: CurrentUser, db: Session) -> tuple[dict, int]:
         raise_http_error(404, ApiCode.POST_NOT_FOUND)
     PostLikesModel.add_like(post_id, user.id, db=db)
     like_count = PostsModel.increment_like_count(post_id, db=db)
-    return success_response(ApiCode.POSTLIKE_UPLOADED, {"likeCount": like_count}), 201
+    return success_response(ApiCode.LIKE_SUCCESS, {"likeCount": like_count}), 201
 
 
 def delete_like(

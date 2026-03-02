@@ -1,4 +1,4 @@
-from .base import Base
+from .base import Base, utc_now
 from .connection import check_database, close_database, init_database
 from .engine import SessionLocal, engine
 from .session import get_connection, get_db
@@ -12,4 +12,5 @@ __all__ = [
     "get_connection",
     "get_db",
     "init_database",
+    "utc_now",
 ]

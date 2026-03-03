@@ -117,7 +117,12 @@ class UsersModel:
     def delete_user(cls, user_id: int, db: Session) -> bool:
         r = db.execute(
             update(User)
-            .where(User.id == user_id)
-            .values(is_active=False, profile_image_id=None, deleted_at=utc_now())
+            .where(User.id == user_id, User.deleted_at.is_(None))
+            .values(
+                nickname=f"withdrawn_{user_id}",
+                is_active=False,
+                profile_image_id=None,
+                deleted_at=utc_now(),
+            )
         )
         return r.rowcount > 0

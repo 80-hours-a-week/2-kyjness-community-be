@@ -176,3 +176,51 @@ HTTP 응답  { "code": "...", "data": { ... } }
 
 세션 저장소는 MySQL(`sessions` 테이블).
 
+---
+
+## 이미지 (업로드·회원가입·생명주기)
+
+이미지는 **미리 업로드**, **회원가입 시 소유 묶기(signupToken)**, **참조 카운팅(ref_count)** 세 가지 흐름으로 설계되어 있습니다. 관련 코드는 `app/domain/media/`(router, controller, model, image_policy), 게시글/사용자 도메인에서 `MediaModel.increment_ref_count` / `decrement_ref_count` 호출로 생명주기에 관여합니다.
+
+### 1. 미리 업로드 (파일 먼저, 본문/가입 나중)
+
+- **목적**: DB 트랜잭션 점유를 줄이고, 본문 작성·회원가입 실패 시에도 업로드된 파일만 재사용할 수 있게 합니다.
+- **흐름**:
+  - **회원가입용**: 비로그인 상태에서 `POST /v1/media/images/signup`으로 업로드 → 스토리지 저장 + `images` 테이블에 `uploader_id=NULL`, `signup_token_hash`, `signup_expires_at` 저장. 응답에 `imageId`, `signupToken` 반환.
+  - **로그인 후**: `POST /v1/media/images?purpose=profile|post`로 업로드 → 스토리지 저장 + `images`에 `uploader_id=현재 사용자`, `ref_count`는 이후 프로필/게시글 첨부 시 증가.
+- **정책**: `image_policy.save_image_for_media`에서 purpose 검증, 매직 바이트로 JPEG/PNG/WebP 판별, 크기 제한(`MAX_FILE_SIZE`), `storage_save`(로컬 또는 S3) 호출. 회원가입용 업로드는 rate limit 별도 적용(`check_signup_upload_rate_limit`).
+
+### 2. 회원가입·signupToken (가입 전 이미지 소유 증명)
+
+- **상황**: 가입 전에는 계정이 없어 프로필 이미지는 `uploader_id=NULL`로만 저장됩니다. 가입 폼에서 "이미 업로드한 imageId"를 넘기면, 제3자가 그 imageId만 알아서 남의 이미지를 자기 프로필로 가져가는 것을 막아야 합니다.
+- **방식**: 업로드 시에만 발급되는 **signupToken**(일회성, TTL 있음)으로 소유를 증명합니다.
+  - 업로드 응답: `imageId` + **signupToken**(평문, 클라이언트가 보관).
+  - 가입 요청: `profile_image_id` + **signupToken**을 함께 보냄.
+  - 서버: `MediaModel.verify_signup_token(image_id, token)`으로 동일 이미지·토큰 해시 일치·미만료·아직 미첨부(`uploader_id IS NULL`)인지 검증. 통과 시 `attach_signup_image`로 해당 이미지에 `uploader_id=신규 사용자`, `ref_count+=1`, `signup_token_hash`/`signup_expires_at` NULL 처리해 회원가입용 상태를 해제합니다.
+- **만료 미첨부 이미지**: 주기적으로 `cleanup_expired_signup_images`가 `uploader_id IS NULL`이고 `signup_token_hash`/`signup_expires_at`가 있으며 만료된 로우를 찾아 스토리지 삭제 후 DB에서 삭제합니다(`app/core/cleanup.py` 연동).
+
+### 3. 생명주기 (Reference Counting, ref_count)
+
+- **의미**: 한 이미지가 "프로필 사진" 또는 "게시글 첨부"로 몇 번 참조되는지 `images.ref_count`로 관리합니다. 참조가 0이 되면 해당 로우와 스토리지 파일을 삭제하는 **즉시 처리** 방식을 쓰며, 향후 비동기 배치(Batch GC)로 바꿀 수 있도록 한 곳(`decrement_ref_count`)에서만 삭제 판단을 합니다.
+- **증가(ref_count += 1)**:
+  - 회원가입 시 프로필 이미지로 묶을 때: `attach_signup_image` 내부에서 `ref_count+1`.
+  - 게시글 생성/수정 시 첨부 이미지로 추가할 때: `PostsModel`에서 `MediaModel.increment_ref_count(image_id)`.
+  - 프로필 이미지 변경 시 새 이미지 선택: `UsersModel` 업데이트 후 `MediaModel.increment_ref_count(새 profile_image_id)`.
+- **감소(ref_count -= 1)**:
+  - 게시글 수정 시 특정 이미지를 첨부에서 뺄 때, 게시글 삭제 시 해당 글의 모든 첨부 이미지: `MediaModel.decrement_ref_count(image_id)`.
+  - 프로필 이미지 변경/삭제 시 이전 이미지: `decrement_ref_count(이전 profile_image_id)`.
+  - 회원 탈퇴 시 프로필 이미지: `decrement_ref_count(profile_image_id)`.
+- **삭제 판단**: `decrement_ref_count` 안에서 `ref_count`를 1 줄인 뒤 `ref_count <= 0`이면 스토리지 파일 삭제(`storage_delete`) 후 해당 `images` 로우 `DELETE`. 동시성은 `with_for_update()`로 해당 로우 락 후 감소·판단합니다.
+- **FK 정책**: `post_images`는 `posts`에 대해 `ON DELETE RESTRICT`로 두어, 게시글 삭제 시 앱에서 먼저 `post_images` 정리 및 각 `image_id`에 대해 `decrement_ref_count`를 호출한 뒤 게시글을 삭제하도록 합니다.
+
+### 4. API·코드 위치 요약
+
+| 구분 | 엔드포인트/동작 | 코드 위치 |
+|------|-----------------|-----------|
+| 회원가입용 업로드 | POST /v1/media/images/signup | media/router.py, controller.upload_image_for_signup, MediaModel.create_signup_image |
+| 로그인 후 업로드 | POST /v1/media/images?purpose=profile\|post | media/router, controller.upload_image, MediaModel.create_image |
+| 가입 시 이미지 소유 묶기 | signup 시 profile_image_id + signupToken | auth/controller.signup_user → MediaModel.verify_signup_token, attach_signup_image |
+| ref_count 증가 | 게시글 첨부, 프로필 설정/변경 | posts/model(create_post, update_post), users/controller(update_me), auth(attach_signup_image) |
+| ref_count 감소·삭제 | 게시글 첨부 해제/삭제, 프로필 변경/탈퇴 | posts/model(update_post, delete_post), users/controller(update_me, delete_me), MediaModel.decrement_ref_count |
+| 만료 회원가입용 이미지 정리 | 주기 작업 | core/cleanup.py → MediaModel.cleanup_expired_signup_images |
+

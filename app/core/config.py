@@ -1,4 +1,4 @@
-# 환경 변수 설정 (Settings). ENV에 따라 .env.development / .env.production 로드.
+# 환경 변수 (Settings). ENV에 따라 .env.{ENV} 만 로드. 단일 .env 미사용.
 import os
 from pathlib import Path
 from typing import List
@@ -9,7 +9,6 @@ _root = Path(__file__).resolve().parent.parent.parent
 _env_file = _root / f".env.{_env}"
 if _env_file.exists():
     load_dotenv(_env_file)
-# 단일 .env 미사용. .env.development / .env.production 만 사용.
 
 
 class Settings:

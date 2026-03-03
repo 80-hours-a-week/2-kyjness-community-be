@@ -1,17 +1,13 @@
 # 인증 비즈니스 로직. 회원가입·로그인·로그아웃·세션 생성.
-import logging
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-logger = logging.getLogger(__name__)
-
 from app.auth.model import AuthModel
 from app.auth.schema import SignUpRequest, LoginRequest, LoginResponse, SessionUserResponse
-from app.common import ApiCode
+from app.common import ApiCode, raise_http_error, success_response
 from app.core.dependencies import CurrentUser
 from app.core.security import hash_password, verify_password
-from app.common import raise_http_error, success_response
 from app.media.model import MediaModel
 from app.users.model import UsersModel
 
@@ -39,7 +35,7 @@ def signup_user(data: SignUpRequest, db: Session) -> dict:
         db=db,
     )
     if profile_image_id is not None:
-        MediaModel.attach_signup_image(profile_image_id, created.id, db=db),
+        MediaModel.attach_signup_image(profile_image_id, created.id, db=db)
     return success_response(ApiCode.SIGNUP_SUCCESS)
 
 

@@ -1,5 +1,4 @@
-# 닉네임·비밀번호 형식 검증 (ensure_nickname_format, ensure_password_format).
-# DB에서 읽은 naive datetime을 UTC로 해석해 API 응답 시 Z 포함하도록 함.
+# 닉네임·비밀번호·UTC datetime 검증. ensure_* / UtcDatetime. DB naive datetime → API Z 포함.
 import re
 from datetime import datetime, timezone
 from typing import Annotated, Optional

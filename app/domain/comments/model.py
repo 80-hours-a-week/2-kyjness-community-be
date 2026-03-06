@@ -1,13 +1,12 @@
 # 댓글 CRUD. Comment ORM 반환, Controller/매퍼에서 Schema로 직렬화.
-from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, mapped_column, relationship, joinedload
 from sqlalchemy import Integer, Text, DateTime, ForeignKey
 
-from app.db import Base
-from app.users.model import User
+from app.db import Base, utc_now
+from app.users.model import User, DogProfile
 
 
 class Comment(Base):
@@ -27,18 +26,21 @@ class Comment(Base):
 class CommentsModel:
     @classmethod
     def create_comment(cls, post_id: int, user_id: int, content: str, db: Session) -> Comment:
-        now = datetime.now(timezone.utc)
+        now = utc_now()
         c = Comment(post_id=post_id, author_id=user_id, content=content, created_at=now, updated_at=now, deleted_at=None)
         db.add(c)
         db.flush()
         return c
 
     @classmethod
-    def find_comment_by_id(cls, comment_id: int, db: Session) -> Optional[Comment]:
+    def get_comment_by_id(cls, comment_id: int, db: Session) -> Optional[Comment]:
         stmt = (
             select(Comment)
             .where(Comment.id == comment_id, Comment.deleted_at.is_(None))
-            .options(joinedload(Comment.author).joinedload(User.profile_image))
+            .options(
+            joinedload(Comment.author).joinedload(User.profile_image),
+            joinedload(Comment.author).selectinload(User.dogs).joinedload(DogProfile.profile_image),
+        )
         )
         return db.execute(stmt).unique().scalars().one_or_none()
 
@@ -54,9 +56,11 @@ class CommentsModel:
         offset = (page - 1) * size
         stmt = (
             select(Comment)
-            .join(User, Comment.author_id == User.id)
-            .where(Comment.post_id == post_id, Comment.deleted_at.is_(None), User.deleted_at.is_(None))
-            .options(joinedload(Comment.author).joinedload(User.profile_image))
+            .where(Comment.post_id == post_id, Comment.deleted_at.is_(None))
+            .options(
+            joinedload(Comment.author).joinedload(User.profile_image),
+            joinedload(Comment.author).selectinload(User.dogs).joinedload(DogProfile.profile_image),
+        )
             .order_by(Comment.id.desc())
             .limit(size)
             .offset(offset)
@@ -64,22 +68,11 @@ class CommentsModel:
         return list(db.execute(stmt).unique().scalars().all())
 
     @classmethod
-    def get_comment_count_by_post_id(cls, post_id: int, db: Session) -> int:
-        stmt = (
-            select(func.count(Comment.id))
-            .select_from(Comment)
-            .join(User, Comment.author_id == User.id)
-            .where(Comment.post_id == post_id, Comment.deleted_at.is_(None), User.deleted_at.is_(None))
-        )
-        row = db.execute(stmt).scalar()
-        return row or 0
-
-    @classmethod
     def update_comment(cls, post_id: int, comment_id: int, content: str, db: Session) -> int:
         r = db.execute(
             update(Comment)
             .where(Comment.id == comment_id, Comment.post_id == post_id, Comment.deleted_at.is_(None))
-            .values(content=content, updated_at=datetime.now(timezone.utc))
+            .values(content=content, updated_at=utc_now())
         )
         return r.rowcount
 
@@ -88,6 +81,6 @@ class CommentsModel:
         r = db.execute(
             update(Comment)
             .where(Comment.id == comment_id, Comment.post_id == post_id, Comment.deleted_at.is_(None))
-            .values(deleted_at=datetime.now(timezone.utc))
+            .values(deleted_at=utc_now())
         )
         return r.rowcount > 0

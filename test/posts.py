@@ -152,7 +152,7 @@ def test_add_like_success(client, auth_cookies):
     post_id = create.json()["data"]["postId"]
     res = client.post(f"/v1/posts/{post_id}/likes", cookies=auth_cookies)
     assert res.status_code == 201
-    assert res.json()["code"] == "POSTLIKE_UPLOADED"
+    assert res.json()["code"] == "LIKE_SUCCESS"
     assert "likeCount" in res.json()["data"]
 
 
@@ -192,7 +192,6 @@ def test_delete_like_success(client, auth_cookies):
 
 
 def test_delete_like_when_not_liked(client, auth_cookies):
-    """이미 좋아요 없을 때 DELETE → 멱등하게 204"""
     create = client.post(
         "/v1/posts",
         json={"title": "No like", "content": "x"},

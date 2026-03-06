@@ -40,8 +40,12 @@ COPY --from=builder /app/app ./app
 RUN mkdir -p /app/upload && chown -R appuser:appgroup /app
 
 ENV PYTHONUNBUFFERED=1
-EXPOSE 8000
+
+# 빌드 시 --build-arg PORT=9000 등으로 변경 가능. 런타임 오버라이드: docker run --entrypoint /bin/sh 이미지
+ARG PORT=8000
+EXPOSE ${PORT}
 
 USER appuser
 
-CMD ["gunicorn", "app.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000"]
+ENTRYPOINT ["gunicorn"]
+CMD ["app.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000"]

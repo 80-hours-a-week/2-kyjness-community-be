@@ -68,7 +68,7 @@ def test_login_email_not_found(client):
         json={"email": "nonexistent@example.com", "password": "password12"},
     )
     assert res.status_code == 401
-    assert res.json()["code"] == "EMAIL_NOT_FOUND"
+    assert res.json()["code"] == "INVALID_CREDENTIALS"
 
 
 def test_me_unauthorized(client):
